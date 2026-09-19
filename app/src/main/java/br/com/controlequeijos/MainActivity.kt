@@ -241,7 +241,7 @@ fun ControleQueijosApp(context: Context) {
                             Text("Saída: R$ %.2f/un.".format(p.exitValue))
                             Text("Lucro por unidade: R$ %.2f".format(p.exitValue - p.entryValue))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { if (p.quantity > 0) saleDialogProduct = p }) { Text("Registrar venda") }
+                                Button(onClick = { saleDialogProduct = p }) { Text("Registrar venda") }
                                 OutlinedButton(onClick = { orderDialogProduct = p }) { Text("Encomenda") }
                                 OutlinedButton(onClick = { editingProduct = p; productDialog = true }) { Text("Editar") }
                             }
@@ -264,8 +264,8 @@ fun ControleQueijosApp(context: Context) {
                                 if (o.status != "Entregue" && o.status != "Cancelada") {
                                     Button(onClick = {
                                         val p = products.find { it.id == o.productId }
-                                        if (p != null && p.quantity >= o.quantity && !o.stockApplied) {
-                                            persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity - o.quantity) else it })
+                                        if (p != null && !o.stockApplied) {
+                                            persistProducts(products.map { if (it.id == p.id) p.copy(quantity = (p.quantity - o.quantity).coerceAtLeast(0)) else it })
                                             persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Entregue", stockApplied = true) else it })
                                         }
                                     }) { Text("Entregar") }
