@@ -22,6 +22,7 @@ import java.util.Locale
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
 data class Sale(val id: Long, val productId: Long, val productName: String, val quantity: Int, val unitValue: Double, val unitCost: Double, val date: Long)
 data class Expense(val id: Long, val description: String, val value: Double, val date: Long)
+data class Client(val id: Long, val name: String, val phone: String, val notes: String)
 data class Order(
     val id: Long,
     val customerName: String,
@@ -44,6 +45,7 @@ private const val EXPENSES_OLD = "expenses"
 private const val SALES = "sales"
 private const val EXPENSE_LIST = "expense_list"
 private const val ORDERS = "orders"
+private const val CLIENTS = "clients"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,6 +123,29 @@ private fun saveExpenses(context: Context, expenses: List<Expense>) {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(EXPENSE_LIST, json.toString()).apply()
 }
 
+private fun loadClients(context: Context): List<Client> = runCatching {
+    val json = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(CLIENTS, "[]"))
+    List(json.length()) { i ->
+        val o = json.getJSONObject(i)
+        Client(
+            o.getLong("id"),
+            o.getString("name"),
+            o.optString("phone", ""),
+            o.optString("notes", "")
+        )
+    }
+}.getOrDefault(emptyList())
+
+private fun saveClients(context: Context, clients: List<Client>) {
+    val json = JSONArray()
+    clients.forEach { c ->
+        json.put(JSONObject().apply {
+            put("id", c.id); put("name", c.name); put("phone", c.phone); put("notes", c.notes)
+        })
+    }
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(CLIENTS, json.toString()).apply()
+}
+
 private fun loadOrders(context: Context): List<Order> = runCatching {
     val json = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ORDERS, "[]"))
     List(json.length()) { i ->
@@ -168,18 +193,23 @@ fun ControleQueijosApp(context: Context) {
     var sales by remember { mutableStateOf(loadSales(context)) }
     var expenses by remember { mutableStateOf(loadExpenses(context)) }
     var orders by remember { mutableStateOf(loadOrders(context)) }
+    var clients by remember { mutableStateOf(loadClients(context)) }
     var productDialog by remember { mutableStateOf(false) }
     var saleDialogProduct by remember { mutableStateOf<Product?>(null) }
     var orderDialogProduct by remember { mutableStateOf<Product?>(null) }
     var editingOrder by remember { mutableStateOf<Order?>(null) }
     var expenseDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<Product?>(null) }
+    var clientDialog by remember { mutableStateOf(false) }
+    var editingClient by remember { mutableStateOf<Client?>(null) }
+    var paymentOrder by remember { mutableStateOf<Order?>(null) }
     var period by remember { mutableStateOf("Todos") }
 
     fun persistProducts(p: List<Product>) { products = p; saveProducts(context, p) }
     fun persistSales(s: List<Sale>) { sales = s; saveSales(context, s) }
     fun persistExpenses(e: List<Expense>) { expenses = e; saveExpenses(context, e) }
     fun persistOrders(o: List<Order>) { orders = o; saveOrders(context, o) }
+    fun persistClients(c: List<Client>) { clients = c; saveClients(context, c) }
 
     val filteredSales = sales.filter { inPeriod(it.date, period) }
     val filteredExpenses = expenses.filter { inPeriod(it.date, period) }
@@ -198,11 +228,18 @@ fun ControleQueijosApp(context: Context) {
     val ordersReceivable = ordersTotal - ordersPaid
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V6") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.1") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item {
+                    Text("Painel", style = MaterialTheme.typography.headlineSmall)
+                    Text("Encomendas pendentes: " + filteredOrders.count { it.status == "Pendente" })
+                    Text("Clientes cadastrados: " + clients.size)
+                    Text("A receber: R$ %.2f".format(ordersReceivable))
+                    Text("Estoque total: " + products.sumOf { it.quantity } + " un.")
+                }
                 item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
                     Text("Vendas realizadas: R$ %.2f".format(saleRevenue))
@@ -248,6 +285,10 @@ fun ControleQueijosApp(context: Context) {
                         Button(onClick = { editingProduct = null; productDialog = true }) { Text("Cadastrar produto") }
                         OutlinedButton(onClick = { expenseDialog = true }) { Text("Novo gasto") }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    Button(onClick = { editingClient = null; clientDialog = true }) { Text("Cadastrar cliente") }
+                    OutlinedButton(onClick = { /* lista abaixo */ }) { Text("Clientes: " + clients.size) }
+                    }
                 }
 
                 item { Text("Estoque", style = MaterialTheme.typography.headlineSmall) }
@@ -269,7 +310,30 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
 
-                item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.typography.headlineSmall) }
+                item { Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall) }
+                if (clients.isEmpty()) item { Text("Nenhum cliente cadastrado.") }
+                items(clients.sortedBy { it.name.lowercase(Locale.getDefault()) }, key = { it.id }) { client ->
+                    val clientOrders = orders.filter { it.customerName.equals(client.name, ignoreCase = true) }
+                    val total = clientOrders.sumOf { it.totalValue }
+                    val paid = clientOrders.sumOf { it.paidValue }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(client.name, style = MaterialTheme.typography.titleMedium)
+                            if (client.phone.isNotBlank()) Text("Telefone: " + client.phone)
+                            Text("Compras/encomendas: " + clientOrders.size)
+                            Text("Total: R$ %.2f | A receber: R$ %.2f".format(total, total - paid))
+                            if (client.notes.isNotBlank()) Text("Obs.: " + client.notes)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(onClick = { editingClient = client; clientDialog = true }) { Text("Editar") }
+                                TextButton(onClick = {
+                                    if (clientOrders.isEmpty()) persistClients(clients.filterNot { it.id == client.id })
+                                }) { Text("Excluir") }
+                            }
+                        }
+                    }
+                }
+
+item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.typography.headlineSmall) }
                 if (filteredOrders.isEmpty()) item { Text("Nenhuma encomenda no período.") }
                 items(filteredOrders.sortedByDescending { it.orderDate }, key = { it.id }) { o ->
                     Card(Modifier.fillMaxWidth()) {
@@ -281,6 +345,9 @@ fun ControleQueijosApp(context: Context) {
                             Text("Pedido: " + dateOnly(o.orderDate) + " | Entrega: " + dateOnly(o.deliveryDate))
                             Text("Status: " + o.status)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (o.status != "Cancelada" && o.totalValue - o.paidValue > 0.005) {
+                                    OutlinedButton(onClick = { paymentOrder = o }) { Text("Registrar pagamento") }
+                                }
                                 if (o.status != "Entregue" && o.status != "Cancelada") {
                                     Button(onClick = {
                                         val p = products.find { it.id == o.productId }
@@ -336,6 +403,24 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
             }
+        }
+    }
+
+
+    if (clientDialog) ClientDialog(editingClient, { clientDialog = false }) { name, phone, notes ->
+        val existing = editingClient
+        val saved = if (existing == null) clients + Client(System.currentTimeMillis(), name, phone, notes)
+        else clients.map { if (it.id == existing.id) existing.copy(name = name, phone = phone, notes = notes) else it }
+        persistClients(saved)
+        clientDialog = false
+    }
+
+    paymentOrder?.let { o ->
+        PaymentDialog(o, { paymentOrder = null }) { amount ->
+            val remaining = (o.totalValue - o.paidValue).coerceAtLeast(0.0)
+            val newPaid = (o.paidValue + amount).coerceAtMost(o.totalValue)
+            persistOrders(orders.map { if (it.id == o.id) o.copy(paidValue = newPaid) else it })
+            paymentOrder = null
         }
     }
 
@@ -421,6 +506,53 @@ private fun buildReportText(
             appendLine("${it.name}: ${it.quantity} un. | custo estimado: R$ %.2f".format(it.quantity * it.entryValue))
         }
     }
+}
+
+
+@Composable
+private fun ClientDialog(client: Client?, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+    var name by remember(client) { mutableStateOf(client?.name ?: "") }
+    var phone by remember(client) { mutableStateOf(client?.phone ?: "") }
+    var notes by remember(client) { mutableStateOf(client?.notes ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (client == null) "Cadastrar cliente" else "Editar cliente") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Nome") }, singleLine = true)
+                OutlinedTextField(phone, { phone = it }, label = { Text("Telefone/WhatsApp") }, singleLine = true)
+                OutlinedTextField(notes, { notes = it }, label = { Text("Observações") }, minLines = 2)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { if (name.isNotBlank()) onSave(name.trim(), phone.trim(), notes.trim()) }) { Text("Salvar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+    var value by remember(order) { mutableStateOf("") }
+    val remaining = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Registrar pagamento") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Cliente: " + order.customerName)
+                Text("Saldo atual: R$ %.2f".format(remaining))
+                OutlinedTextField(value, { value = it.replace(",", ".") }, label = { Text("Valor recebido") }, singleLine = true)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val amount = value.toDoubleOrNull() ?: 0.0
+                if (amount > 0 && amount <= remaining + 0.005) onSave(amount)
+            }) { Text("Registrar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }
 
 @Composable
