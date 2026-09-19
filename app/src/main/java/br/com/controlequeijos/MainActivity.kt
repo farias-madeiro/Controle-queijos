@@ -1,5 +1,7 @@
 package br.com.controlequeijos
 
+// V7.1 build verification
+
 import android.content.Context
 import android.os.Bundle
 import android.content.Intent
