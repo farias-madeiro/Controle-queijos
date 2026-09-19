@@ -474,6 +474,8 @@ item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.ty
     }
 }
 
+}
+
 private fun buildReportText(
     period: String,
     saleRevenue: Double,
@@ -659,6 +661,4 @@ private fun ExpenseDialog(onDismiss: () -> Unit, onSave: (String, Double) -> Uni
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
     )
-}
-
 }
