@@ -660,3 +660,5 @@ private fun ExpenseDialog(onDismiss: () -> Unit, onSave: (String, Double) -> Uni
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }
+
+}
