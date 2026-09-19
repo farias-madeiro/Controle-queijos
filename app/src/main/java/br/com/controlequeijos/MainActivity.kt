@@ -404,8 +404,6 @@ item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.ty
                 }
             }
         }
-    }
-
 
     if (clientDialog) ClientDialog(editingClient, { clientDialog = false }) { name, phone, notes ->
         val existing = editingClient
