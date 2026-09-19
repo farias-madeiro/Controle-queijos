@@ -65,7 +65,7 @@ private fun saveExpenses(context: Context, v: Double) { context.getSharedPrefere
             }
         }
     } }
-    if (dialog) ProductDialog(editing, { dialog = false }, { name, q, v -> val e = editing; val updated = if (e == null) products + Product(System.currentTimeMillis(), name, q, entry, exit) else products.map { if (it.id == e.id) e.copy(name=name, quantity=q, entryValue=entry, exitValue=exit) else it }; persist(updated); dialog=false })
+    if (dialog) ProductDialog(editing, { dialog = false }, { name, q, entry, exit -> val e = editing; val updated = if (e == null) products + Product(System.currentTimeMillis(), name, q, entry, exit) else products.map { if (it.id == e.id) e.copy(name=name, quantity=q, entryValue=entry, exitValue=exit) else it }; persist(updated); dialog=false })
 }
 
 @Composable private fun ProductDialog(product: Product?, onDismiss: () -> Unit, onSave: (String, Int, Double, Double) -> Unit) {
