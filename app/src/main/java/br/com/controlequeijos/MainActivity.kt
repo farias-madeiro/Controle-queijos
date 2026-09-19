@@ -231,7 +231,7 @@ fun ControleQueijosApp(context: Context) {
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, report)
-                        }, "Compartilhar relatório"))
+                        }, "Compartilhar relatório").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }) { Text("Compartilhar relatório") }
                 }
                 item {
