@@ -2,6 +2,7 @@ package br.com.controlequeijos
 
 import android.content.Context
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -197,7 +198,7 @@ fun ControleQueijosApp(context: Context) {
     val ordersReceivable = ordersTotal - ordersPaid
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V5") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V6") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -213,6 +214,25 @@ fun ControleQueijosApp(context: Context) {
                     Text("Encomendas no período: R$ %.2f".format(ordersTotal))
                     Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
                     Text("A receber: R$ %.2f".format(ordersReceivable))
+                }
+                item {
+                    Text("Relatórios", style = MaterialTheme.typography.headlineSmall)
+                    Text("Vendas: R$ %.2f".format(saleRevenue))
+                    Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
+                    Text("Gastos: R$ %.2f".format(expenseTotal))
+                    Text("Lucro: R$ %.2f".format(profit))
+                    Text("Recebido: R$ %.2f".format(ordersPaid))
+                    Text("A receber: R$ %.2f".format(ordersReceivable))
+                    Text("Produtos em estoque: " + products.sumOf { it.quantity })
+                    Text("Valor estimado do estoque: R$ %.2f".format(products.sumOf { it.quantity * it.entryValue }))
+                    Spacer(Modifier.height(6.dp))
+                    Button(onClick = {
+                        val report = buildReportText(period, saleRevenue, orderRevenue, cost, expenseTotal, profit, ordersTotal, ordersPaid, ordersReceivable, products)
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }, "Compartilhar relatório"))
+                    }) { Text("Compartilhar relatório") }
                 }
                 item {
                     Text("Período", style = MaterialTheme.typography.titleMedium)
@@ -367,6 +387,39 @@ fun ControleQueijosApp(context: Context) {
     if (expenseDialog) ExpenseDialog({ expenseDialog = false }) { description, value ->
         persistExpenses(expenses + Expense(System.currentTimeMillis(), description, value, System.currentTimeMillis()))
         expenseDialog = false
+    }
+}
+
+private fun buildReportText(
+    period: String,
+    saleRevenue: Double,
+    orderRevenue: Double,
+    cost: Double,
+    expenses: Double,
+    profit: Double,
+    ordersTotal: Double,
+    ordersPaid: Double,
+    ordersReceivable: Double,
+    products: List<Product>
+): String {
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — RELATÓRIO")
+        appendLine("Período: $period")
+        appendLine()
+        appendLine("Vendas realizadas: R$ %.2f".format(saleRevenue))
+        appendLine("Encomendas entregues: R$ %.2f".format(orderRevenue))
+        appendLine("Custo das mercadorias: R$ %.2f".format(cost))
+        appendLine("Gastos: R$ %.2f".format(expenses))
+        appendLine("Lucro: R$ %.2f".format(profit))
+        appendLine()
+        appendLine("Encomendas no período: R$ %.2f".format(ordersTotal))
+        appendLine("Recebido de encomendas: R$ %.2f".format(ordersPaid))
+        appendLine("A receber: R$ %.2f".format(ordersReceivable))
+        appendLine()
+        appendLine("ESTOQUE")
+        products.forEach {
+            appendLine("${it.name}: ${it.quantity} un. | custo estimado: R$ %.2f".format(it.quantity * it.entryValue))
+        }
     }
 }
 
