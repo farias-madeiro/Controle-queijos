@@ -290,7 +290,6 @@ fun ControleQueijosApp(context: Context) {
                     Spacer(Modifier.height(6.dp))
                     Button(onClick = { editingClient = null; clientDialog = true }) { Text("Cadastrar cliente") }
                     OutlinedButton(onClick = { /* lista abaixo */ }) { Text("Clientes: " + clients.size) }
-                    }
                 }
 
                 item { Text("Estoque", style = MaterialTheme.typography.headlineSmall) }
