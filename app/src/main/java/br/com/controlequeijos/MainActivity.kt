@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.9 — visão financeira por cliente e comunicação
+// V7.9.1 — correção da busca de clientes
 
 import android.content.Context
 import android.os.Bundle
@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.text.Normalizer
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -174,6 +175,9 @@ private fun saveOrders(context: Context, orders: List<Order>) {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(ORDERS, json.toString()).apply()
 }
 
+private fun normalizeSearch(text: String): String = Normalizer.normalize(text.trim(), Normalizer.Form.NFD).replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").lowercase(Locale.getDefault())
+private fun normalizePhone(text: String): String = text.filter(Char::isDigit)
+
 private fun dateText(time: Long): String = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date(time))
 private fun dateOnly(time: Long): String = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).format(Date(time))
 private fun sameDay(time: Long): Boolean = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
@@ -249,12 +253,18 @@ fun ControleQueijosApp(context: Context) {
     }.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
     val clientsWithBalance = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
-    val visibleClients = clients.filter { clientSearch.isBlank() || it.name.contains(clientSearch.trim(), ignoreCase = true) || it.phone.contains(clientSearch.trim(), ignoreCase = true) }.sortedBy { it.name.lowercase(Locale.getDefault()) }
+    val searchText = normalizeSearch(clientSearch)
+    val phoneSearch = normalizePhone(clientSearch)
+    val visibleClients = clients.filter { client ->
+        if (clientSearch.isBlank()) true
+        else normalizeSearch(client.name).contains(searchText) ||
+            (phoneSearch.isNotBlank() && normalizePhone(client.phone).contains(phoneSearch))
+    }.sortedBy { normalizeSearch(it.name) }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.9") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.9.1") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -361,7 +371,7 @@ fun ControleQueijosApp(context: Context) {
                 }
                 if (clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
                 items(visibleClients, key = { it.id }) { client ->
-                    val clientOrders = orders.filter { it.customerName.equals(client.name, ignoreCase = true) }
+                    val clientOrders = orders.filter { it.status != "Cancelada" && normalizeSearch(it.customerName) == normalizeSearch(client.name) }
                     val total = clientOrders.sumOf { it.totalValue }
                     val paid = clientOrders.sumOf { it.paidValue }
                     Card(Modifier.fillMaxWidth()) {
