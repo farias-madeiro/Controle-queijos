@@ -248,7 +248,7 @@ fun ControleQueijosApp(context: Context) {
                     DashboardCard("💰 Faturamento", "R$ %.2f".format(revenue))
                     DashboardCard("📈 Lucro líquido", "R$ %.2f".format(profit))
                     DashboardCard("💳 A receber", "R$ %.2f".format(ordersReceivable))
-                    DashboardCard("📦 Estoque", products.sumOf { it.quantity } + " un. • R$ %.2f".format(stockValue))
+                    DashboardCard("📦 Estoque", products.sumOf { it.quantity }.toString() + " un. • R$ %.2f".format(stockValue))
                     DashboardCard("🛒 Vendas", filteredSales.sumOf { it.quantity }.toString() + " unidades • ticket médio R$ %.2f".format(averageSale))
                     DashboardCard("📋 Encomendas pendentes", pendingOrders.size.toString())
                     if (overdueOrders.isNotEmpty()) {
