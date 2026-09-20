@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.7 — comunicação de encomendas e financeiro por cliente
+// V7.8 — gestão de clientes e acompanhamento financeiro por cliente
 
 import android.content.Context
 import android.os.Bundle
@@ -209,6 +209,7 @@ fun ControleQueijosApp(context: Context) {
     var period by remember { mutableStateOf("Todos") }
     var orderFilter by remember { mutableStateOf("Todas") }
     var orderSearch by remember { mutableStateOf("") }
+    var clientSearch by remember { mutableStateOf("") }
 
     fun persistProducts(p: List<Product>) { products = p; saveProducts(context, p) }
     fun persistSales(s: List<Sale>) { sales = s; saveSales(context, s) }
@@ -247,11 +248,13 @@ fun ControleQueijosApp(context: Context) {
         matchesFilter && (orderSearch.isBlank() || o.customerName.contains(orderSearch.trim(), ignoreCase = true) || o.productName.contains(orderSearch.trim(), ignoreCase = true))
     }.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
+    val clientsWithBalance = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
+    val visibleClients = clients.filter { clientSearch.isBlank() || it.name.contains(clientSearch.trim(), ignoreCase = true) || it.phone.contains(clientSearch.trim(), ignoreCase = true) }.sortedBy { it.name.lowercase(Locale.getDefault()) }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.7") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.8") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -268,6 +271,7 @@ fun ControleQueijosApp(context: Context) {
                     DashboardCard("⚠️ Entregas atrasadas", overdueOrders.size.toString())
                     DashboardCard("✅ Encomendas entregues", deliveredOrdersCount.toString())
                     DashboardCard("👥 Clientes", clients.size.toString())
+                    DashboardCard("💳 Clientes com saldo", clientsWithBalance.toString())
                     if (overdueOrders.isNotEmpty()) {
                         Text("⚠️ Há encomendas com entrega atrasada.", color = MaterialTheme.colorScheme.error)
                     }
@@ -350,8 +354,12 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
 
-                item { Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall) }
-                if (clients.isEmpty()) item { Text("Nenhum cliente cadastrado.") }
+                item {
+                    Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall)
+                    OutlinedTextField(clientSearch, { clientSearch = it }, label = { Text("Buscar cliente ou telefone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (clientSearch.isNotBlank()) Text("Exibindo: " + visibleClients.size + " cliente(s)")
+                }
+                if (clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
                 items(clients.sortedBy { it.name.lowercase(Locale.getDefault()) }, key = { it.id }) { client ->
                     val clientOrders = orders.filter { it.customerName.equals(client.name, ignoreCase = true) }
                     val total = clientOrders.sumOf { it.totalValue }
