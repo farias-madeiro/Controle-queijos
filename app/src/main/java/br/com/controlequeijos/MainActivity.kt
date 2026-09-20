@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.2 build verification
+// V7.3 dashboard e controle financeiro
 
 import android.content.Context
 import android.os.Bundle
@@ -228,9 +228,11 @@ fun ControleQueijosApp(context: Context) {
     val ordersTotal = filteredOrders.sumOf { it.totalValue }
     val ordersPaid = filteredOrders.sumOf { it.paidValue }
     val ordersReceivable = ordersTotal - ordersPaid
+    val lowStockProducts = products.filter { it.quantity <= 5 }
+    val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.2") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.3") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -241,6 +243,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Clientes cadastrados: " + clients.size)
                     Text("A receber: R$ %.2f".format(ordersReceivable))
                     Text("Estoque total: " + products.sumOf { it.quantity } + " un.")
+                    Text("Produtos com estoque baixo: " + lowStockProducts.size)
                 }
                 item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
@@ -249,6 +252,8 @@ fun ControleQueijosApp(context: Context) {
                     Text("Custo das mercadorias: R$ %.2f".format(cost))
                     Text("Gastos: R$ %.2f".format(expenseTotal))
                     Text("Lucro: R$ %.2f".format(profit))
+                    Text("Margem sobre vendas: %.2f%%".format(profitMargin))
+                    Text("Gastos lançados: " + filteredExpenses.size)
                     Spacer(Modifier.height(6.dp))
                     Text("Encomendas no período: R$ %.2f".format(ordersTotal))
                     Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
@@ -263,7 +268,9 @@ fun ControleQueijosApp(context: Context) {
                     Text("Recebido: R$ %.2f".format(ordersPaid))
                     Text("A receber: R$ %.2f".format(ordersReceivable))
                     Text("Produtos em estoque: " + products.sumOf { it.quantity })
+                    Text("Produtos com estoque baixo: " + lowStockProducts.size)
                     Text("Valor estimado do estoque: R$ %.2f".format(products.sumOf { it.quantity * it.entryValue }))
+                    Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Spacer(Modifier.height(6.dp))
                     Button(onClick = {
                         val report = buildReportText(period, saleRevenue, orderRevenue, cost, expenseTotal, profit, ordersTotal, ordersPaid, ordersReceivable, products)
