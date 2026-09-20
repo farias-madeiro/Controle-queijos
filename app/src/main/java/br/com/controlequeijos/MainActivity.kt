@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.3 dashboard e controle financeiro
+// V7.5 — foco em encomendas e controle financeiro
 
 import android.content.Context
 import android.os.Bundle
@@ -229,15 +229,16 @@ fun ControleQueijosApp(context: Context) {
     val ordersTotal = filteredOrders.sumOf { it.totalValue }
     val ordersPaid = filteredOrders.sumOf { it.paidValue }
     val ordersReceivable = ordersTotal - ordersPaid
-    val lowStockProducts = products.filter { it.quantity <= 5 }
     val pendingOrders = filteredOrders.filter { it.status == "Pendente" }
     val overdueOrders = pendingOrders.filter { isOverdue(it.deliveryDate) }
-    val stockValue = products.sumOf { it.quantity * it.entryValue }
+    val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
+    val deliveredOrdersCount = filteredOrders.count { it.status == "Entregue" }
+    val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.4") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.5") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -247,17 +248,19 @@ fun ControleQueijosApp(context: Context) {
                     Spacer(Modifier.height(4.dp))
                     DashboardCard("💰 Faturamento", "R$ %.2f".format(revenue))
                     DashboardCard("📈 Lucro líquido", "R$ %.2f".format(profit))
-                    DashboardCard("💳 A receber", "R$ %.2f".format(ordersReceivable))
-                    DashboardCard("📦 Estoque", products.sumOf { it.quantity }.toString() + " un. • R$ %.2f".format(stockValue))
-                    DashboardCard("🛒 Vendas", filteredSales.sumOf { it.quantity }.toString() + " unidades • ticket médio R$ %.2f".format(averageSale))
+                    DashboardCard("💳 Total a receber", "R$ %.2f".format(ordersReceivable))
                     DashboardCard("📋 Encomendas pendentes", pendingOrders.size.toString())
+                    DashboardCard("💵 Valor das pendentes", "R$ %.2f".format(pendingOrdersValue))
+                    DashboardCard("📅 Entregas hoje", dueTodayOrders.size.toString())
+                    DashboardCard("⚠️ Entregas atrasadas", overdueOrders.size.toString())
+                    DashboardCard("✅ Encomendas entregues", deliveredOrdersCount.toString())
+                    DashboardCard("👥 Clientes", clients.size.toString())
                     if (overdueOrders.isNotEmpty()) {
-                        Text("⚠️ Entregas atrasadas: " + overdueOrders.size, color = MaterialTheme.colorScheme.error)
+                        Text("⚠️ Há encomendas com entrega atrasada.", color = MaterialTheme.colorScheme.error)
                     }
-                    if (lowStockProducts.isNotEmpty()) {
-                        Text("⚠️ Estoque baixo: " + lowStockProducts.joinToString(", ") { it.name })
+                    if (dueTodayOrders.isNotEmpty()) {
+                        Text("📅 Há encomendas previstas para hoje.")
                     }
-                    Text("Clientes cadastrados: " + clients.size)
                 }
                 item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
@@ -281,9 +284,10 @@ fun ControleQueijosApp(context: Context) {
                     Text("Lucro: R$ %.2f".format(profit))
                     Text("Recebido: R$ %.2f".format(ordersPaid))
                     Text("A receber: R$ %.2f".format(ordersReceivable))
-                    Text("Produtos em estoque: " + products.sumOf { it.quantity })
-                    Text("Produtos com estoque baixo: " + lowStockProducts.size)
-                    Text("Valor estimado do estoque: R$ %.2f".format(products.sumOf { it.quantity * it.entryValue }))
+                    Text("Encomendas pendentes: " + pendingOrders.size)
+                    Text("Valor das encomendas pendentes: R$ %.2f".format(pendingOrdersValue))
+                    Text("Entregas atrasadas: " + overdueOrders.size)
+                    Text("Entregas previstas para hoje: " + dueTodayOrders.size)
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Spacer(Modifier.height(6.dp))
                     Button(onClick = {
@@ -313,14 +317,14 @@ fun ControleQueijosApp(context: Context) {
                     OutlinedButton(onClick = { /* lista abaixo */ }) { Text("Clientes: " + clients.size) }
                 }
 
-                item { Text("Estoque", style = MaterialTheme.typography.headlineSmall) }
+                item { Text("Produtos / Catálogo", style = MaterialTheme.typography.headlineSmall) }
                 if (products.isEmpty()) item { Text("Nenhum produto cadastrado.") }
                 items(products, key = { it.id }) { p ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(p.name, style = MaterialTheme.typography.titleMedium)
-                            Text("Estoque: " + p.quantity)
-                            Text("Entrada: R$ %.2f/un.".format(p.entryValue))
+                            Text("Disponibilidade: por encomenda")
+                            Text("Custo: R$ %.2f/un.".format(p.entryValue))
                             Text("Saída: R$ %.2f/un.".format(p.exitValue))
                             Text("Lucro por unidade: R$ %.2f".format(p.exitValue - p.entryValue))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -372,12 +376,8 @@ item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.ty
                                 }
                                 if (o.status != "Entregue" && o.status != "Cancelada") {
                                     Button(onClick = {
-                                        val p = products.find { it.id == o.productId }
-                                        if (p != null && !o.stockApplied) {
-                                            persistProducts(products.map { if (it.id == p.id) p.copy(quantity = (p.quantity - o.quantity).coerceAtLeast(0)) else it })
-                                            persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Entregue", stockApplied = true) else it })
-                                        }
-                                    }) { Text("Entregar") }
+                                        persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Entregue", stockApplied = false) else it })
+                                    }) { Text("Marcar entregue") }
                                     OutlinedButton(onClick = {
                                         persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Cancelada") else it })
                                     }) { Text("Cancelar") }
@@ -533,10 +533,9 @@ private fun buildReportText(
         appendLine("Recebido de encomendas: R$ %.2f".format(ordersPaid))
         appendLine("A receber: R$ %.2f".format(ordersReceivable))
         appendLine()
-        appendLine("ESTOQUE")
-        products.forEach {
-            appendLine("${it.name}: ${it.quantity} un. | custo estimado: R$ %.2f".format(it.quantity * it.entryValue))
-        }
+        appendLine("ENCOMENDAS")
+        appendLine("Controle principal: produção e entrega sob encomenda.")
+        appendLine("Produtos tratados como catálogo, sem necessidade de estoque.")
     }
 }
 
@@ -624,7 +623,7 @@ private fun SaleDialog(product: Product, onDismiss: () -> Unit, onSave: (Int) ->
         title = { Text("Registrar venda — " + product.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Estoque disponível: " + product.quantity)
+                Text("Produção: sob encomenda")
                 Text("Valor unitário: R$ %.2f".format(product.exitValue))
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade vendida") }, singleLine = true)
             }
@@ -656,9 +655,7 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
                     enabled = order?.stockApplied != true,
                     singleLine = true
                 )
-                if (order?.stockApplied != true) {
-                    Text("Estoque disponível: " + product.quantity)
-                }
+                Text("Produção: sob encomenda — estoque não é obrigatório.")
                 OutlinedTextField(delivery, { delivery = it }, label = { Text("Data prevista (dd/MM/yyyy)") }, singleLine = true)
                 if (validationError.isNotBlank()) {
                     Text(validationError, color = MaterialTheme.colorScheme.error)
@@ -675,8 +672,6 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
                     validationError = "Informe o nome do cliente."
                 } else if (q <= 0) {
                     validationError = "Informe uma quantidade válida."
-                } else if (order?.stockApplied != true && q > product.quantity) {
-                    validationError = "Quantidade maior que o estoque disponível."
                 } else {
                     onSave(customer.trim(), q, parseDate(delivery, defaultDeliveryDate()), p)
                 }
