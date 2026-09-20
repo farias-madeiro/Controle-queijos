@@ -28,4 +28,4 @@ jobs:
           name: Controle-Queijos-V7.5-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
-# V7.5 build trigger
+# V7.5 build trigger — artifact name corrected
