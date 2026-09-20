@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.10 — encomendas agrupadas por cliente
+// V7.11 — relatório compartilhado consolidado por produto
 
 import android.content.Context
 import android.os.Bundle
@@ -267,7 +267,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.10") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.11") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -322,7 +322,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Spacer(Modifier.height(6.dp))
                     Button(onClick = {
-                        val report = buildReportText(period, saleRevenue, orderRevenue, cost, expenseTotal, profit, ordersTotal, ordersPaid, ordersReceivable, products)
+                        val report = buildReportText(period, saleRevenue, orderRevenue, cost, expenseTotal, profit, ordersTotal, ordersPaid, ordersReceivable, activeOrders)
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, report)
@@ -633,8 +633,19 @@ private fun buildReportText(
     ordersTotal: Double,
     ordersPaid: Double,
     ordersReceivable: Double,
-    products: List<Product>
+    orders: List<Order>
 ): String {
+    val productSummary = orders
+        .groupBy { normalizeSearch(it.productName) }
+        .values
+        .map { group ->
+            val name = group.first().productName.trim()
+            val quantity = group.sumOf { it.quantity }
+            val value = group.sumOf { it.totalValue }
+            Triple(name, quantity, value)
+        }
+        .sortedBy { normalizeSearch(it.first) }
+
     return buildString {
         appendLine("CONTROLE QUEIJOS — RELATÓRIO")
         appendLine("Período: $period")
@@ -649,9 +660,17 @@ private fun buildReportText(
         appendLine("Recebido de encomendas: R$ %.2f".format(ordersPaid))
         appendLine("A receber: R$ %.2f".format(ordersReceivable))
         appendLine()
-        appendLine("ENCOMENDAS")
-        appendLine("Controle principal: produção e entrega sob encomenda.")
-        appendLine("Produtos tratados como catálogo, sem necessidade de estoque.")
+        appendLine("PRODUTOS ENCOMENDADOS")
+        if (productSummary.isEmpty()) {
+            appendLine("Nenhuma encomenda no período.")
+        } else {
+            productSummary.forEach { (name, quantity, value) ->
+                appendLine("• $name — $quantity un. — R$ %.2f".format(value))
+            }
+        }
+        appendLine()
+        appendLine("Relatório consolidado por produto.")
+        appendLine("Os nomes dos clientes não são incluídos neste compartilhamento.")
     }
 }
 
