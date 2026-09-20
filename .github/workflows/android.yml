@@ -29,4 +29,5 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
 # V7.11 artifact naming
-# trigger build V7.11
+# trigger build V7.11.1
+# lista unica de producao
