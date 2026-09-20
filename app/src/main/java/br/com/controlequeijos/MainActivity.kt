@@ -322,11 +322,11 @@ fun ControleQueijosApp(context: Context) {
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Spacer(Modifier.height(6.dp))
                     Button(onClick = {
-                        val report = buildReportText(period, saleRevenue, orderRevenue, cost, expenseTotal, profit, ordersTotal, ordersPaid, ordersReceivable, activeOrders)
+                        val report = buildReportText(period, activeOrders)
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, report)
-                        }, "Compartilhar relatório").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }) { Text("Compartilhar relatório") }
                 }
                 item {
@@ -623,54 +623,29 @@ private fun buildClientMessage(client: Client, orders: List<Order>, total: Doubl
     }
 }
 
-private fun buildReportText(
-    period: String,
-    saleRevenue: Double,
-    orderRevenue: Double,
-    cost: Double,
-    expenses: Double,
-    profit: Double,
-    ordersTotal: Double,
-    ordersPaid: Double,
-    ordersReceivable: Double,
-    orders: List<Order>
-): String {
+private fun buildReportText(period: String, orders: List<Order>): String {
     val productSummary = orders
+        .filter { it.status != "Cancelada" }
         .groupBy { normalizeSearch(it.productName) }
         .values
         .map { group ->
             val name = group.first().productName.trim()
             val quantity = group.sumOf { it.quantity }
-            val value = group.sumOf { it.totalValue }
-            Triple(name, quantity, value)
+            name to quantity
         }
         .sortedBy { normalizeSearch(it.first) }
 
     return buildString {
-        appendLine("CONTROLE QUEIJOS — RELATÓRIO")
+        appendLine("CONTROLE QUEIJOS — LISTA DE PRODUÇÃO")
         appendLine("Período: $period")
         appendLine()
-        appendLine("Vendas realizadas: R$ %.2f".format(saleRevenue))
-        appendLine("Encomendas entregues: R$ %.2f".format(orderRevenue))
-        appendLine("Custo das mercadorias: R$ %.2f".format(cost))
-        appendLine("Gastos: R$ %.2f".format(expenses))
-        appendLine("Lucro: R$ %.2f".format(profit))
-        appendLine()
-        appendLine("Encomendas no período: R$ %.2f".format(ordersTotal))
-        appendLine("Recebido de encomendas: R$ %.2f".format(ordersPaid))
-        appendLine("A receber: R$ %.2f".format(ordersReceivable))
-        appendLine()
-        appendLine("PRODUTOS ENCOMENDADOS")
         if (productSummary.isEmpty()) {
             appendLine("Nenhuma encomenda no período.")
         } else {
-            productSummary.forEach { (name, quantity, value) ->
-                appendLine("• $name — $quantity un. — R$ %.2f".format(value))
+            productSummary.forEach { (name, quantity) ->
+                appendLine("• $name — $quantity un.")
             }
         }
-        appendLine()
-        appendLine("Relatório consolidado por produto.")
-        appendLine("Os nomes dos clientes não são incluídos neste compartilhamento.")
     }
 }
 
