@@ -178,6 +178,7 @@ private fun dateText(time: Long): String = SimpleDateFormat("dd/MM/yyyy HH:mm", 
 private fun dateOnly(time: Long): String = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).format(Date(time))
 private fun sameDay(time: Long): Boolean = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 private fun sameMonth(time: Long): Boolean = SimpleDateFormat("yyyyMM", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMM", Locale.US).format(Date())
+private fun isOverdue(time: Long): Boolean = time < System.currentTimeMillis()
 private fun inPeriod(time: Long, period: String) = period == "Todos" || (period == "Hoje" && sameDay(time)) || (period == "Mês" && sameMonth(time))
 private fun parseDate(text: String, fallback: Long): Long {
     return runCatching { SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).parse(text)?.time ?: fallback }.getOrDefault(fallback)
@@ -229,21 +230,34 @@ fun ControleQueijosApp(context: Context) {
     val ordersPaid = filteredOrders.sumOf { it.paidValue }
     val ordersReceivable = ordersTotal - ordersPaid
     val lowStockProducts = products.filter { it.quantity <= 5 }
+    val pendingOrders = filteredOrders.filter { it.status == "Pendente" }
+    val overdueOrders = pendingOrders.filter { isOverdue(it.deliveryDate) }
+    val stockValue = products.sumOf { it.quantity * it.entryValue }
+    val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.3") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.4") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
                     Text("Painel", style = MaterialTheme.typography.headlineSmall)
-                    Text("Encomendas pendentes: " + filteredOrders.count { it.status == "Pendente" })
+                    Spacer(Modifier.height(4.dp))
+                    DashboardCard("💰 Faturamento", "R$ %.2f".format(revenue))
+                    DashboardCard("📈 Lucro líquido", "R$ %.2f".format(profit))
+                    DashboardCard("💳 A receber", "R$ %.2f".format(ordersReceivable))
+                    DashboardCard("📦 Estoque", products.sumOf { it.quantity } + " un. • R$ %.2f".format(stockValue))
+                    DashboardCard("🛒 Vendas", filteredSales.sumOf { it.quantity }.toString() + " unidades • ticket médio R$ %.2f".format(averageSale))
+                    DashboardCard("📋 Encomendas pendentes", pendingOrders.size.toString())
+                    if (overdueOrders.isNotEmpty()) {
+                        Text("⚠️ Entregas atrasadas: " + overdueOrders.size, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (lowStockProducts.isNotEmpty()) {
+                        Text("⚠️ Estoque baixo: " + lowStockProducts.joinToString(", ") { it.name })
+                    }
                     Text("Clientes cadastrados: " + clients.size)
-                    Text("A receber: R$ %.2f".format(ordersReceivable))
-                    Text("Estoque total: " + products.sumOf { it.quantity } + " un.")
-                    Text("Produtos com estoque baixo: " + lowStockProducts.size)
                 }
                 item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
@@ -481,6 +495,16 @@ item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.ty
     }
 }
 
+}
+
+@Composable
+private fun DashboardCard(title: String, value: String) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            Text(value, style = MaterialTheme.typography.titleLarge)
+        }
+    }
 }
 
 private fun buildReportText(
