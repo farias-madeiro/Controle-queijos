@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.1 build verification
+// V7.2 build verification
 
 import android.content.Context
 import android.os.Bundle
@@ -230,7 +230,7 @@ fun ControleQueijosApp(context: Context) {
     val ordersReceivable = ordersTotal - ordersPaid
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.1") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.2") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -609,6 +609,7 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
     var quantity by remember(order) { mutableStateOf(order?.quantity?.toString() ?: "1") }
     var delivery by remember(order) { mutableStateOf(if (order == null) dateOnly(defaultDeliveryDate()) else dateOnly(order.deliveryDate)) }
     var paid by remember(order) { mutableStateOf(order?.paidValue?.toString() ?: "0") }
+    var validationError by remember(order) { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (order == null) "Nova encomenda" else "Editar encomenda") },
@@ -619,12 +620,18 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
                 OutlinedTextField(customer, { customer = it }, label = { Text("Nome do cliente") }, singleLine = true)
                 OutlinedTextField(
                     quantity,
-                    { quantity = it.filter(Char::isDigit) },
+                    { quantity = it.filter(Char::isDigit); validationError = "" },
                     label = { Text(if (order?.stockApplied == true) "Quantidade (entregue)" else "Quantidade") },
                     enabled = order?.stockApplied != true,
                     singleLine = true
                 )
+                if (order?.stockApplied != true) {
+                    Text("Estoque disponível: " + product.quantity)
+                }
                 OutlinedTextField(delivery, { delivery = it }, label = { Text("Data prevista (dd/MM/yyyy)") }, singleLine = true)
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
                 OutlinedTextField(paid, { paid = it.replace(",", ".") }, label = { Text("Valor pago") }, singleLine = true)
                 if (order == null) Text("Status inicial: Pendente")
             }
@@ -633,7 +640,15 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
             Button(onClick = {
                 val q = quantity.toIntOrNull() ?: 0
                 val p = paid.toDoubleOrNull() ?: 0.0
-                if (customer.isNotBlank() && q > 0) onSave(customer.trim(), q, parseDate(delivery, defaultDeliveryDate()), p)
+                if (customer.isBlank()) {
+                    validationError = "Informe o nome do cliente."
+                } else if (q <= 0) {
+                    validationError = "Informe uma quantidade válida."
+                } else if (order?.stockApplied != true && q > product.quantity) {
+                    validationError = "Quantidade maior que o estoque disponível."
+                } else {
+                    onSave(customer.trim(), q, parseDate(delivery, defaultDeliveryDate()), p)
+                }
             }) { Text("Salvar") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
