@@ -25,9 +25,9 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-Queijos-V7.11-debug
+          name: Controle-Queijos-V7.12-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
-# V7.11 artifact naming
-# trigger build V7.11.1
+# V7.12 artifact naming
+# trigger build V7.12
 # lista unica de producao
