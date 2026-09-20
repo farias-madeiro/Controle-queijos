@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.6 — agenda de encomendas, recebimentos e filtros
+// V7.7 — comunicação de encomendas e financeiro por cliente
 
 import android.content.Context
 import android.os.Bundle
@@ -251,7 +251,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.6") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.7") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -400,7 +400,18 @@ item {
                             Text("Pago: R$ %.2f | Saldo: R$ %.2f".format(o.paidValue, o.totalValue - o.paidValue))
                             Text("Pedido: " + dateOnly(o.orderDate) + " | Entrega: " + dateOnly(o.deliveryDate))
                             Text("Status: " + o.status + if (o.status == "Pendente" && isOverdue(o.deliveryDate)) " • ATRASADA" else "")
+                            Text(
+                                if (o.totalValue - o.paidValue <= 0.005) "Pagamento: QUITADO"
+                                else "Pagamento: PENDENTE — R$ %.2f".format(o.totalValue - o.paidValue)
+                            )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(onClick = {
+                                    val message = buildOrderMessage(o)
+                                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, message)
+                                    }, "Compartilhar encomenda").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }) { Text("Compartilhar") }
                                 if (o.status != "Cancelada" && o.totalValue - o.paidValue > 0.005) {
                                     OutlinedButton(onClick = { paymentOrder = o }) { Text("Registrar pagamento") }
                                 }
@@ -484,11 +495,8 @@ item {
 
     saleDialogProduct?.let { p ->
         SaleDialog(p, { saleDialogProduct = null }) { q ->
-            if (q in 1..p.quantity) {
-                val now = System.currentTimeMillis()
-                persistSales(sales + Sale(now, p.id, p.name, q, p.exitValue, p.entryValue, now))
-                persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity - q) else it })
-            }
+            val now = System.currentTimeMillis()
+            persistSales(sales + Sale(now, p.id, p.name, q, p.exitValue, p.entryValue, now))
             saleDialogProduct = null
         }
     }
@@ -534,6 +542,24 @@ private fun DashboardCard(title: String, value: String) {
             Text(title, style = MaterialTheme.typography.labelLarge)
             Text(value, style = MaterialTheme.typography.titleLarge)
         }
+    }
+}
+
+private fun buildOrderMessage(order: Order): String {
+    val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — ENCOMENDA")
+        appendLine()
+        appendLine("Cliente: " + order.customerName)
+        appendLine("Produto: " + order.productName)
+        appendLine("Quantidade: " + order.quantity + " un.")
+        appendLine("Valor total: R$ %.2f".format(order.totalValue))
+        appendLine("Valor pago: R$ %.2f".format(order.paidValue))
+        appendLine("Saldo: R$ %.2f".format(balance))
+        appendLine("Entrega prevista: " + dateOnly(order.deliveryDate))
+        appendLine("Status: " + order.status)
+        appendLine()
+        appendLine("Obrigado pela preferência!")
     }
 }
 
@@ -653,7 +679,7 @@ private fun SaleDialog(product: Product, onDismiss: () -> Unit, onSave: (Int) ->
         title = { Text("Registrar venda — " + product.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Produção: sob encomenda")
+                Text("Venda registrada sem controle de estoque.")
                 Text("Valor unitário: R$ %.2f".format(product.exitValue))
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade vendida") }, singleLine = true)
             }
