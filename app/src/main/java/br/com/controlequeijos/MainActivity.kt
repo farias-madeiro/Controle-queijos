@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.9.1 — correção da busca de clientes
+// V7.10 — encomendas agrupadas por cliente
 
 import android.content.Context
 import android.os.Bundle
@@ -28,6 +28,7 @@ data class Expense(val id: Long, val description: String, val value: Double, val
 data class Client(val id: Long, val name: String, val phone: String, val notes: String)
 data class Order(
     val id: Long,
+    val customerId: Long,
     val customerName: String,
     val productId: Long,
     val productName: String,
@@ -154,7 +155,7 @@ private fun loadOrders(context: Context): List<Order> = runCatching {
     List(json.length()) { i ->
         val o = json.getJSONObject(i)
         Order(
-            o.getLong("id"), o.getString("customerName"), o.getLong("productId"), o.getString("productName"),
+            o.getLong("id"), o.optLong("customerId", 0L), o.getString("customerName"), o.getLong("productId"), o.getString("productName"),
             o.getInt("quantity"), o.getDouble("unitValue"), o.optDouble("unitCost", 0.0),
             o.getDouble("totalValue"), o.getDouble("paidValue"), o.getLong("orderDate"),
             o.getLong("deliveryDate"), o.getString("status"), o.optBoolean("stockApplied", false)
@@ -166,7 +167,7 @@ private fun saveOrders(context: Context, orders: List<Order>) {
     val json = JSONArray()
     orders.forEach { o ->
         json.put(JSONObject().apply {
-            put("id", o.id); put("customerName", o.customerName); put("productId", o.productId); put("productName", o.productName)
+            put("id", o.id); put("customerId", o.customerId); put("customerName", o.customerName); put("productId", o.productId); put("productName", o.productName)
             put("quantity", o.quantity); put("unitValue", o.unitValue); put("unitCost", o.unitCost)
             put("totalValue", o.totalValue); put("paidValue", o.paidValue); put("orderDate", o.orderDate)
             put("deliveryDate", o.deliveryDate); put("status", o.status); put("stockApplied", o.stockApplied)
@@ -255,6 +256,8 @@ fun ControleQueijosApp(context: Context) {
     val clientsWithBalance = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
     val searchText = normalizeSearch(clientSearch)
     val phoneSearch = normalizePhone(clientSearch)
+    val migratedOrders = orders.map { o -> if (o.customerId != 0L) o else clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(o.customerName) }?.let { o.copy(customerId = it.id) } ?: o }
+    if (migratedOrders != orders) persistOrders(migratedOrders)
     val visibleClients = clients.filter { client ->
         if (clientSearch.isBlank()) true
         else normalizeSearch(client.name).contains(searchText) ||
@@ -264,7 +267,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.9.1") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.10") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -371,7 +374,7 @@ fun ControleQueijosApp(context: Context) {
                 }
                 if (clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
                 items(visibleClients, key = { it.id }) { client ->
-                    val clientOrders = orders.filter { it.status != "Cancelada" && normalizeSearch(it.customerName) == normalizeSearch(client.name) }
+                    val clientOrders = orders.filter { it.status != "Cancelada" && (it.customerId == client.id || (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name))) }.sortedByDescending { it.orderDate }
                     val total = clientOrders.sumOf { it.totalValue }
                     val paid = clientOrders.sumOf { it.paidValue }
                     Card(Modifier.fillMaxWidth()) {
@@ -381,6 +384,16 @@ fun ControleQueijosApp(context: Context) {
                             Text("Compras/encomendas: " + clientOrders.size)
                             Text("Total: R$ %.2f | Recebido: R$ %.2f".format(total, paid))
                             Text("Saldo: R$ %.2f".format((total - paid).coerceAtLeast(0.0)))
+                            if (clientOrders.isNotEmpty()) {
+                                Text("Histórico de encomendas", style = MaterialTheme.typography.labelLarge)
+                                clientOrders.forEach { order ->
+                                    Text(
+                                        dateOnly(order.orderDate) + " • " + order.productName + " • " +
+                                            order.quantity + " un. • R$ %.2f • ".format(order.totalValue) + order.status,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
                             if (client.notes.isNotBlank()) Text("Obs.: " + client.notes)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = { editingClient = client; clientDialog = true }) { Text("Editar") }
@@ -531,7 +544,8 @@ item {
         OrderDialog(p, null, { orderDialogProduct = null }) { customer, q, delivery, paid ->
             val now = System.currentTimeMillis()
             val total = q * p.exitValue
-            val order = Order(now, customer, p.id, p.name, q, p.exitValue, p.entryValue, total, paid.coerceIn(0.0, total), now, delivery, "Pendente", false)
+            val customerId = clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(customer) }?.id ?: 0L
+            val order = Order(now, customerId, customer, p.id, p.name, q, p.exitValue, p.entryValue, total, paid.coerceIn(0.0, total), now, delivery, "Pendente", false)
             persistOrders(orders + order)
             orderDialogProduct = null
         }
@@ -542,6 +556,7 @@ item {
             val total = q * o.unitValue
             val updated = orders.map {
                 if (it.id == o.id) it.copy(
+                    customerId = clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(customer) }?.id ?: o.customerId,
                     customerName = customer, quantity = if (o.stockApplied) o.quantity else q,
                     totalValue = if (o.stockApplied) o.totalValue else total,
                     paidValue = paid.coerceIn(0.0, if (o.stockApplied) o.totalValue else total),
