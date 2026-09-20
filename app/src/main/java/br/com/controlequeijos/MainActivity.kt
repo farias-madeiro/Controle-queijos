@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.11 — relatório compartilhado consolidado por produto
+// V7.12 — filtros e lista de produção aprimorados
 
 import android.content.Context
 import android.os.Bundle
@@ -184,7 +184,17 @@ private fun dateOnly(time: Long): String = SimpleDateFormat("dd/MM/yyyy", Locale
 private fun sameDay(time: Long): Boolean = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 private fun sameMonth(time: Long): Boolean = SimpleDateFormat("yyyyMM", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMM", Locale.US).format(Date())
 private fun isOverdue(time: Long): Boolean = time < System.currentTimeMillis()
-private fun inPeriod(time: Long, period: String) = period == "Todos" || (period == "Hoje" && sameDay(time)) || (period == "Mês" && sameMonth(time))
+private fun sameDayOffset(time: Long, offset: Int): Boolean {
+    val target = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
+    val value = Calendar.getInstance().apply { timeInMillis = time }
+    return target.get(Calendar.YEAR) == value.get(Calendar.YEAR) &&
+        target.get(Calendar.DAY_OF_YEAR) == value.get(Calendar.DAY_OF_YEAR)
+}
+private fun inPeriod(time: Long, period: String) = period == "Todos" ||
+    (period == "Hoje" && sameDay(time)) ||
+    (period == "Amanhã" && sameDayOffset(time, 1)) ||
+    (period == "7 dias" && time >= System.currentTimeMillis() - 6 * 24 * 60 * 60 * 1000L) ||
+    (period == "Mês" && sameMonth(time))
 private fun parseDate(text: String, fallback: Long): Long {
     return runCatching { SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).parse(text)?.time ?: fallback }.getOrDefault(fallback)
 }
@@ -267,7 +277,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.11") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.12") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -327,12 +337,12 @@ fun ControleQueijosApp(context: Context) {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, report)
                         }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }) { Text("Compartilhar relatório") }
+                    }) { Text("Compartilhar lista de produção") }
                 }
                 item {
                     Text("Período", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Todos", "Hoje", "Mês").forEach { p ->
+                        listOf("Todos", "Hoje", "Amanhã", "7 dias", "Mês").forEach { p ->
                             if (period == p) Button(onClick = { period = p }) { Text(p) }
                             else OutlinedButton(onClick = { period = p }) { Text(p) }
                         }
