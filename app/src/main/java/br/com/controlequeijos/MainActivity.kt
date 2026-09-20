@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.8 — gestão de clientes e acompanhamento financeiro por cliente
+// V7.9 — visão financeira por cliente e comunicação
 
 import android.content.Context
 import android.os.Bundle
@@ -254,7 +254,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.8") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.9") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -360,7 +360,7 @@ fun ControleQueijosApp(context: Context) {
                     if (clientSearch.isNotBlank()) Text("Exibindo: " + visibleClients.size + " cliente(s)")
                 }
                 if (clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
-                items(clients.sortedBy { it.name.lowercase(Locale.getDefault()) }, key = { it.id }) { client ->
+                items(visibleClients, key = { it.id }) { client ->
                     val clientOrders = orders.filter { it.customerName.equals(client.name, ignoreCase = true) }
                     val total = clientOrders.sumOf { it.totalValue }
                     val paid = clientOrders.sumOf { it.paidValue }
@@ -369,10 +369,18 @@ fun ControleQueijosApp(context: Context) {
                             Text(client.name, style = MaterialTheme.typography.titleMedium)
                             if (client.phone.isNotBlank()) Text("Telefone: " + client.phone)
                             Text("Compras/encomendas: " + clientOrders.size)
-                            Text("Total: R$ %.2f | A receber: R$ %.2f".format(total, total - paid))
+                            Text("Total: R$ %.2f | Recebido: R$ %.2f".format(total, paid))
+                            Text("Saldo: R$ %.2f".format((total - paid).coerceAtLeast(0.0)))
                             if (client.notes.isNotBlank()) Text("Obs.: " + client.notes)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = { editingClient = client; clientDialog = true }) { Text("Editar") }
+                                OutlinedButton(onClick = {
+                                    val message = buildClientMessage(client, clientOrders, total, paid)
+                                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, message)
+                                    }, "Compartilhar cliente").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }) { Text("Compartilhar") }
                                 TextButton(onClick = {
                                     if (clientOrders.isEmpty()) persistClients(clients.filterNot { it.id == client.id })
                                 }) { Text("Excluir") }
@@ -568,6 +576,25 @@ private fun buildOrderMessage(order: Order): String {
         appendLine("Status: " + order.status)
         appendLine()
         appendLine("Obrigado pela preferência!")
+    }
+}
+
+
+private fun buildClientMessage(client: Client, orders: List<Order>, total: Double, paid: Double): String {
+    val balance = (total - paid).coerceAtLeast(0.0)
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — CLIENTE")
+        appendLine()
+        appendLine("Cliente: " + client.name)
+        if (client.phone.isNotBlank()) appendLine("Telefone: " + client.phone)
+        appendLine("Encomendas: " + orders.size)
+        appendLine("Total: R$ %.2f".format(total))
+        appendLine("Recebido: R$ %.2f".format(paid))
+        appendLine("Saldo: R$ %.2f".format(balance))
+        appendLine()
+        orders.sortedByDescending { it.orderDate }.take(10).forEach {
+            appendLine(dateOnly(it.orderDate) + " — " + it.productName + " (" + it.quantity + " un.) — R$ %.2f".format(it.totalValue))
+        }
     }
 }
 
