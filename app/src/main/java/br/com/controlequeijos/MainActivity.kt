@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.5 — foco em encomendas e controle financeiro
+// V7.6 — agenda de encomendas, recebimentos e filtros
 
 import android.content.Context
 import android.os.Bundle
@@ -207,6 +207,8 @@ fun ControleQueijosApp(context: Context) {
     var editingClient by remember { mutableStateOf<Client?>(null) }
     var paymentOrder by remember { mutableStateOf<Order?>(null) }
     var period by remember { mutableStateOf("Todos") }
+    var orderFilter by remember { mutableStateOf("Todas") }
+    var orderSearch by remember { mutableStateOf("") }
 
     fun persistProducts(p: List<Product>) { products = p; saveProducts(context, p) }
     fun persistSales(s: List<Sale>) { sales = s; saveSales(context, s) }
@@ -217,7 +219,8 @@ fun ControleQueijosApp(context: Context) {
     val filteredSales = sales.filter { inPeriod(it.date, period) }
     val filteredExpenses = expenses.filter { inPeriod(it.date, period) }
     val filteredOrders = orders.filter { inPeriod(it.orderDate, period) }
-    val deliveredOrders = filteredOrders.filter { it.status == "Entregue" }
+    val activeOrders = filteredOrders.filter { it.status != "Cancelada" }
+    val deliveredOrders = activeOrders.filter { it.status == "Entregue" }
     val saleRevenue = filteredSales.sumOf { it.quantity * it.unitValue }
     val saleCost = filteredSales.sumOf { it.quantity * it.unitCost }
     val orderRevenue = deliveredOrders.sumOf { it.totalValue }
@@ -226,19 +229,29 @@ fun ControleQueijosApp(context: Context) {
     val cost = saleCost + orderCost
     val expenseTotal = filteredExpenses.sumOf { it.value }
     val profit = revenue - cost - expenseTotal
-    val ordersTotal = filteredOrders.sumOf { it.totalValue }
-    val ordersPaid = filteredOrders.sumOf { it.paidValue }
+    val ordersTotal = activeOrders.sumOf { it.totalValue }
+    val ordersPaid = activeOrders.sumOf { it.paidValue }
     val ordersReceivable = ordersTotal - ordersPaid
-    val pendingOrders = filteredOrders.filter { it.status == "Pendente" }
+    val pendingOrders = activeOrders.filter { it.status == "Pendente" }
     val overdueOrders = pendingOrders.filter { isOverdue(it.deliveryDate) }
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
-    val deliveredOrdersCount = filteredOrders.count { it.status == "Entregue" }
+    val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
+    val visibleOrders = activeOrders.filter { o ->
+        val matchesFilter = when (orderFilter) {
+            "Pendentes" -> o.status == "Pendente"
+            "Hoje" -> sameDay(o.deliveryDate) && o.status == "Pendente"
+            "Atrasadas" -> o.status == "Pendente" && isOverdue(o.deliveryDate)
+            "Entregues" -> o.status == "Entregue"
+            else -> true
+        }
+        matchesFilter && (orderSearch.isBlank() || o.customerName.contains(orderSearch.trim(), ignoreCase = true) || o.productName.contains(orderSearch.trim(), ignoreCase = true))
+    }.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.5") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.6") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -271,6 +284,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Lucro: R$ %.2f".format(profit))
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Text("Gastos lançados: " + filteredExpenses.size)
+                    Text("Encomendas canceladas: " + filteredOrders.count { it.status == "Cancelada" })
                     Spacer(Modifier.height(6.dp))
                     Text("Encomendas no período: R$ %.2f".format(ordersTotal))
                     Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
@@ -359,9 +373,25 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
 
-item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.typography.headlineSmall) }
-                if (filteredOrders.isEmpty()) item { Text("Nenhuma encomenda no período.") }
-                items(filteredOrders.sortedByDescending { it.orderDate }, key = { it.id }) { o ->
+item {
+                    Text("Encomendas", style = MaterialTheme.typography.headlineSmall)
+                    OutlinedTextField(
+                        value = orderSearch,
+                        onValueChange = { orderSearch = it },
+                        label = { Text("Buscar cliente ou produto") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("Todas", "Pendentes", "Hoje", "Atrasadas", "Entregues").forEach { f ->
+                            if (orderFilter == f) Button(onClick = { orderFilter = f }) { Text(f) }
+                            else OutlinedButton(onClick = { orderFilter = f }) { Text(f) }
+                        }
+                    }
+                    Text("Exibindo: " + visibleOrders.size + " encomenda(s)")
+                }
+                if (visibleOrders.isEmpty()) item { Text("Nenhuma encomenda encontrada.") }
+                items(visibleOrders, key = { it.id }) { o ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(o.customerName, style = MaterialTheme.typography.titleMedium)
@@ -369,7 +399,7 @@ item { Text("Encomendas (" + filteredOrders.size + ")", style = MaterialTheme.ty
                             Text("Total: R$ %.2f".format(o.totalValue))
                             Text("Pago: R$ %.2f | Saldo: R$ %.2f".format(o.paidValue, o.totalValue - o.paidValue))
                             Text("Pedido: " + dateOnly(o.orderDate) + " | Entrega: " + dateOnly(o.deliveryDate))
-                            Text("Status: " + o.status)
+                            Text("Status: " + o.status + if (o.status == "Pendente" && isOverdue(o.deliveryDate)) " • ATRASADA" else "")
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (o.status != "Cancelada" && o.totalValue - o.paidValue > 0.005) {
                                     OutlinedButton(onClick = { paymentOrder = o }) { Text("Registrar pagamento") }
