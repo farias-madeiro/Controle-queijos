@@ -10,8 +10,8 @@ android {
         applicationId = "br.com.controlequeijos"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 181
+        versionName = "7.18.1"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
