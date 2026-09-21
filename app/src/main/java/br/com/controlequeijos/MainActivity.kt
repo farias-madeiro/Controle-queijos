@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.12 — filtros e lista de produção aprimorados
+// V7.13 — acompanhamento da produção
 
 import android.content.Context
 import android.os.Bundle
@@ -252,10 +252,12 @@ fun ControleQueijosApp(context: Context) {
     val overdueOrders = pendingOrders.filter { isOverdue(it.deliveryDate) }
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
+    val productionOrders = activeOrders.filter { it.status == "Em produção" }
     val visibleOrders = activeOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
             "Pendentes" -> o.status == "Pendente"
-            "Hoje" -> sameDay(o.deliveryDate) && o.status == "Pendente"
+            "Em produção" -> o.status == "Em produção"
+            "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue"
             "Atrasadas" -> o.status == "Pendente" && isOverdue(o.deliveryDate)
             "Entregues" -> o.status == "Entregue"
             else -> true
@@ -277,7 +279,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.12") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.13") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -289,6 +291,7 @@ fun ControleQueijosApp(context: Context) {
                     DashboardCard("📈 Lucro líquido", "R$ %.2f".format(profit))
                     DashboardCard("💳 Total a receber", "R$ %.2f".format(ordersReceivable))
                     DashboardCard("📋 Encomendas pendentes", pendingOrders.size.toString())
+                    DashboardCard("🏭 Em produção", productionOrders.size.toString())
                     DashboardCard("💵 Valor das pendentes", "R$ %.2f".format(pendingOrdersValue))
                     DashboardCard("📅 Entregas hoje", dueTodayOrders.size.toString())
                     DashboardCard("⚠️ Entregas atrasadas", overdueOrders.size.toString())
@@ -326,6 +329,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Recebido: R$ %.2f".format(ordersPaid))
                     Text("A receber: R$ %.2f".format(ordersReceivable))
                     Text("Encomendas pendentes: " + pendingOrders.size)
+                    Text("Em produção: " + productionOrders.size)
                     Text("Valor das encomendas pendentes: R$ %.2f".format(pendingOrdersValue))
                     Text("Entregas atrasadas: " + overdueOrders.size)
                     Text("Entregas previstas para hoje: " + dueTodayOrders.size)
@@ -432,7 +436,7 @@ item {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Todas", "Pendentes", "Hoje", "Atrasadas", "Entregues").forEach { f ->
+                        listOf("Todas", "Pendentes", "Em produção", "Hoje", "Atrasadas", "Entregues").forEach { f ->
                             if (orderFilter == f) Button(onClick = { orderFilter = f }) { Text(f) }
                             else OutlinedButton(onClick = { orderFilter = f }) { Text(f) }
                         }
@@ -465,9 +469,16 @@ item {
                                     OutlinedButton(onClick = { paymentOrder = o }) { Text("Registrar pagamento") }
                                 }
                                 if (o.status != "Entregue" && o.status != "Cancelada") {
-                                    Button(onClick = {
-                                        persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Entregue", stockApplied = false) else it })
-                                    }) { Text("Marcar entregue") }
+                                    if (o.status == "Pendente") {
+                                        Button(onClick = {
+                                            persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Em produção") else it })
+                                        }) { Text("Iniciar produção") }
+                                    }
+                                    if (o.status == "Em produção") {
+                                        Button(onClick = {
+                                            persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Entregue", stockApplied = false) else it })
+                                        }) { Text("Marcar entregue") }
+                                    }
                                     OutlinedButton(onClick = {
                                         persistOrders(orders.map { if (it.id == o.id) o.copy(status = "Cancelada") else it })
                                     }) { Text("Cancelar") }
