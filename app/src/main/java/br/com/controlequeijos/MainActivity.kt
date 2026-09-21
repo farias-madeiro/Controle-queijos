@@ -1,10 +1,12 @@
 package br.com.controlequeijos
 
-// V7.14 — filtros e acompanhamento aprimorados
+// V7.15 — backup e transferência de dados
 
 import android.content.Context
 import android.os.Bundle
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -176,6 +178,41 @@ private fun saveOrders(context: Context, orders: List<Order>) {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(ORDERS, json.toString()).apply()
 }
 
+
+private fun buildBackupJson(context: Context): String {
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    return JSONObject().apply {
+        put("format", "controle-queijos-backup")
+        put("version", 1)
+        put("createdAt", System.currentTimeMillis())
+        put("data", JSONObject().apply {
+            put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
+            put("sales", JSONArray(prefs.getString(SALES, "[]")))
+            put("expenses", JSONArray(prefs.getString(EXPENSE_LIST, "[]")))
+            put("orders", JSONArray(prefs.getString(ORDERS, "[]")))
+            put("clients", JSONArray(prefs.getString(CLIENTS, "[]")))
+        })
+    }.toString(2)
+}
+
+private fun restoreBackupJson(context: Context, text: String): Result<Unit> = runCatching {
+    val root = JSONObject(text)
+    require(root.optString("format") == "controle-queijos-backup") { "Arquivo de backup inválido." }
+    val data = root.getJSONObject("data")
+    val products = JSONArray(data.getJSONArray("products").toString())
+    val sales = JSONArray(data.getJSONArray("sales").toString())
+    val expenses = JSONArray(data.getJSONArray("expenses").toString())
+    val orders = JSONArray(data.getJSONArray("orders").toString())
+    val clients = JSONArray(data.getJSONArray("clients").toString())
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        .putString(PRODUCTS, products.toString())
+        .putString(SALES, sales.toString())
+        .putString(EXPENSE_LIST, expenses.toString())
+        .putString(ORDERS, orders.toString())
+        .putString(CLIENTS, clients.toString())
+        .apply()
+}
+
 private fun normalizeSearch(text: String): String = Normalizer.normalize(text.trim(), Normalizer.Form.NFD).replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").lowercase(Locale.getDefault())
 private fun normalizePhone(text: String): String = text.filter(Char::isDigit)
 
@@ -235,6 +272,47 @@ fun ControleQueijosApp(context: Context) {
     var orderFilter by remember { mutableStateOf("Todas") }
     var orderSearch by remember { mutableStateOf("") }
     var clientSearch by remember { mutableStateOf("") }
+    var backupMessage by remember { mutableStateOf("") }
+
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(buildBackupJson(context).toByteArray(Charsets.UTF_8))
+                } ?: error("Não foi possível criar o arquivo.")
+            }.onSuccess {
+                backupMessage = "Backup criado com sucesso."
+            }.onFailure {
+                backupMessage = "Não foi possível criar o backup: ${it.message ?: "erro desconhecido"}"
+            }
+        }
+    }
+
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: error("Não foi possível abrir o arquivo.")
+            }.onSuccess { text ->
+                restoreBackupJson(context, text).onSuccess {
+                    products = loadProducts(context)
+                    sales = loadSales(context)
+                    expenses = loadExpenses(context)
+                    orders = loadOrders(context)
+                    clients = loadClients(context)
+                    backupMessage = "Backup restaurado com sucesso."
+                }.onFailure {
+                    backupMessage = "Backup inválido ou incompatível: ${it.message ?: "erro desconhecido"}"
+                }
+            }.onFailure {
+                backupMessage = "Não foi possível ler o arquivo: ${it.message ?: "erro desconhecido"}"
+            }
+        }
+    }
 
     fun persistProducts(p: List<Product>) { products = p; saveProducts(context, p) }
     fun persistSales(s: List<Sale>) { sales = s; saveSales(context, s) }
@@ -353,6 +431,23 @@ fun ControleQueijosApp(context: Context) {
                             putExtra(Intent.EXTRA_TEXT, report)
                         }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }) { Text("Compartilhar lista de produção") }
+                }
+                item {
+                    Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
+                    Text("O backup guarda clientes, encomendas, vendas e gastos em um arquivo JSON. O formato foi preparado para facilitar uma futura versão iOS.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { exportBackupLauncher.launch("controle-queijos-backup.json") }) {
+                            Text("Fazer backup")
+                        }
+                        OutlinedButton(onClick = {
+                            importBackupLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                        }) {
+                            Text("Restaurar backup")
+                        }
+                    }
+                    if (backupMessage.isNotBlank()) {
+                        Text(backupMessage)
+                    }
                 }
                 item {
                     Text("Período", style = MaterialTheme.typography.titleMedium)
