@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.18 — transferência segura de dados e restauração protegida
+// V7.19 — relatório financeiro compartilhável
 
 import android.content.Context
 import android.os.Bundle
@@ -185,7 +185,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.18")
+        put("appVersion", "V7.19")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -381,7 +381,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.18") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.19") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -437,13 +437,26 @@ fun ControleQueijosApp(context: Context) {
                     Text("Entregas previstas para hoje: " + dueTodayOrders.size)
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Spacer(Modifier.height(6.dp))
-                    Button(onClick = {
-                        val report = buildReportText(period, activeOrders)
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, report)
-                        }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }) { Text("Compartilhar lista de produção") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = {
+                            val report = buildReportText(period, activeOrders)
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }, modifier = Modifier.weight(1f)) { Text("Lista de produção") }
+                        OutlinedButton(onClick = {
+                            val report = buildFinancialReportText(
+                                period, saleRevenue, orderRevenue, cost, expenseTotal,
+                                profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
+                                pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size
+                            )
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }, "Compartilhar relatório financeiro").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }, modifier = Modifier.weight(1f)) { Text("Relatório financeiro") }
+                    }
                 }
                 item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
@@ -885,6 +898,43 @@ private fun buildClientMessage(client: Client, orders: List<Order>, total: Doubl
             appendLine(dateOnly(it.orderDate) + " — " + it.productName + " (" + it.quantity + " un.) — R$ %.2f".format(it.totalValue))
         }
     }
+}
+
+private fun buildFinancialReportText(
+    period: String,
+    saleRevenue: Double,
+    orderRevenue: Double,
+    cost: Double,
+    expenses: Double,
+    profit: Double,
+    margin: Double,
+    ordersTotal: Double,
+    ordersPaid: Double,
+    receivable: Double,
+    pending: Int,
+    production: Int,
+    overdue: Int,
+    dueToday: Int
+): String = buildString {
+    appendLine("CONTROLE QUEIJOS — RELATÓRIO FINANCEIRO")
+    appendLine("Período: " + period)
+    appendLine()
+    appendLine("Vendas realizadas: R$ %.2f".format(saleRevenue))
+    appendLine("Encomendas entregues: R$ %.2f".format(orderRevenue))
+    appendLine("Faturamento: R$ %.2f".format(saleRevenue + orderRevenue))
+    appendLine("Custo das mercadorias: R$ %.2f".format(cost))
+    appendLine("Gastos: R$ %.2f".format(expenses))
+    appendLine("Lucro líquido: R$ %.2f".format(profit))
+    appendLine("Margem: %.2f%%".format(margin))
+    appendLine()
+    appendLine("Encomendas no período: R$ %.2f".format(ordersTotal))
+    appendLine("Recebido: R$ %.2f".format(ordersPaid))
+    appendLine("A receber: R$ %.2f".format(receivable))
+    appendLine()
+    appendLine("Encomendas pendentes: " + pending)
+    appendLine("Em produção: " + production)
+    appendLine("Entregas atrasadas: " + overdue)
+    appendLine("Entregas previstas para hoje: " + dueToday)
 }
 
 private fun buildReportText(period: String, orders: List<Order>): String {
