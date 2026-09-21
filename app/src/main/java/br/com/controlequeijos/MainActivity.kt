@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.16 — exclusão segura de dados
+// V7.17 — exclusão visível e gerenciamento de registros
 
 import android.content.Context
 import android.os.Bundle
@@ -345,13 +345,14 @@ fun ControleQueijosApp(context: Context) {
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
     val normalizedOrderSearch = normalizeSearch(orderSearch)
-    val visibleOrders = activeOrders.filter { o ->
+    val visibleOrders = filteredOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
             "Pendentes" -> o.status == "Pendente"
             "Em produção" -> o.status == "Em produção"
             "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue"
             "Atrasadas" -> o.status == "Pendente" && isOverdue(o.deliveryDate)
             "Entregues" -> o.status == "Entregue"
+            "Canceladas" -> o.status == "Cancelada"
             else -> true
         }
         matchesFilter && (normalizedOrderSearch.isBlank() || normalizeSearch(o.customerName).contains(normalizedOrderSearch) || normalizeSearch(o.productName).contains(normalizedOrderSearch))
@@ -371,7 +372,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.16") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.17") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -485,7 +486,9 @@ fun ControleQueijosApp(context: Context) {
                                 Button(onClick = { saleDialogProduct = p }) { Text("Registrar venda") }
                                 OutlinedButton(onClick = { orderDialogProduct = p }) { Text("Encomenda") }
                                 OutlinedButton(onClick = { editingProduct = p; productDialog = true }) { Text("Editar") }
-                                TextButton(onClick = {
+                            }
+                            OutlinedButton(
+                                onClick = {
                                     val hasOrders = orders.any { it.productId == p.id }
                                     val hasSales = sales.any { it.productId == p.id }
                                     if (hasOrders || hasSales) {
@@ -494,8 +497,9 @@ fun ControleQueijosApp(context: Context) {
                                         pendingDeleteTitle = "Excluir produto?"
                                         pendingDeleteAction = { persistProducts(products.filterNot { it.id == p.id }) }
                                     }
-                                }) { Text("Excluir") }
-                            }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Excluir produto") }
                         }
                     }
                 }
@@ -537,15 +541,18 @@ fun ControleQueijosApp(context: Context) {
                                         putExtra(Intent.EXTRA_TEXT, message)
                                     }, "Compartilhar cliente").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                                 }) { Text("Compartilhar") }
-                                TextButton(onClick = {
+                            }
+                            OutlinedButton(
+                                onClick = {
                                     if (clientOrders.isEmpty()) {
                                         pendingDeleteTitle = "Excluir cliente?"
                                         pendingDeleteAction = { persistClients(clients.filterNot { it.id == client.id }) }
                                     } else {
-                                        deleteMessage = "Este cliente possui encomendas. Exclua primeiro as encomendas para depois excluir o cadastro do cliente."
+                                        deleteMessage = "Este cliente possui encomendas ativas. Exclua ou cancele essas encomendas antes de excluir o cadastro do cliente."
                                     }
-                                }) { Text("Excluir") }
-                            }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Excluir cliente") }
                         }
                     }
                 }
@@ -560,7 +567,7 @@ item {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Todas", "Pendentes", "Em produção", "Hoje", "Atrasadas", "Entregues").forEach { f ->
+                        listOf("Todas", "Pendentes", "Em produção", "Hoje", "Atrasadas", "Entregues", "Canceladas").forEach { f ->
                             if (orderFilter == f) Button(onClick = { orderFilter = f }) { Text(f) }
                             else OutlinedButton(onClick = { orderFilter = f }) { Text(f) }
                         }
@@ -608,17 +615,20 @@ item {
                                     }) { Text("Cancelar") }
                                 }
                                 OutlinedButton(onClick = { editingOrder = o }) { Text("Editar") }
-                                TextButton(onClick = {
+                            }
+                            OutlinedButton(
+                                onClick = {
                                     pendingDeleteTitle = "Excluir encomenda?"
                                     pendingDeleteAction = {
-                                    if (o.stockApplied) {
-                                        val p = products.find { it.id == o.productId }
-                                        if (p != null) persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity + o.quantity) else it })
+                                        if (o.stockApplied) {
+                                            val p = products.find { it.id == o.productId }
+                                            if (p != null) persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity + o.quantity) else it })
+                                        }
+                                        persistOrders(orders.filterNot { it.id == o.id })
                                     }
-                                    persistOrders(orders.filterNot { it.id == o.id })
-                                    }
-                                }) { Text("Excluir") }
-                            }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Excluir encomenda") }
                         }
                     }
                 }
@@ -631,14 +641,17 @@ item {
                             Text(s.productName + " — " + s.quantity + " un.")
                             Text("R$ %.2f".format(s.quantity * s.unitValue))
                             Text(dateText(s.date), style = MaterialTheme.typography.bodySmall)
-                            TextButton(onClick = {
-                                pendingDeleteTitle = "Excluir venda?"
-                                pendingDeleteAction = {
-                                persistSales(sales.filterNot { it.id == s.id })
-                                val p = products.find { it.id == s.productId }
-                                if (p != null) persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity + s.quantity) else it })
-                                }
-                            }) { Text("Excluir venda e devolver estoque") }
+                            OutlinedButton(
+                                onClick = {
+                                    pendingDeleteTitle = "Excluir venda?"
+                                    pendingDeleteAction = {
+                                        persistSales(sales.filterNot { it.id == s.id })
+                                        val p = products.find { it.id == s.productId }
+                                        if (p != null) persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity + s.quantity) else it })
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Excluir venda") }
                         }
                     }
                 }
@@ -651,10 +664,13 @@ item {
                             Text(e.description)
                             Text("R$ %.2f".format(e.value))
                             Text(dateText(e.date), style = MaterialTheme.typography.bodySmall)
-                            TextButton(onClick = {
-                                pendingDeleteTitle = "Excluir gasto?"
-                                pendingDeleteAction = { persistExpenses(expenses.filterNot { it.id == e.id }) }
-                            }) { Text("Excluir gasto") }
+                            OutlinedButton(
+                                onClick = {
+                                    pendingDeleteTitle = "Excluir gasto?"
+                                    pendingDeleteAction = { persistExpenses(expenses.filterNot { it.id == e.id }) }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Excluir gasto") }
                         }
                     }
                 }
