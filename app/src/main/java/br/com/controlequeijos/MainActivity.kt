@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.15 — backup e transferência de dados
+// V7.16 — exclusão segura de dados
 
 import android.content.Context
 import android.os.Bundle
@@ -273,6 +273,9 @@ fun ControleQueijosApp(context: Context) {
     var orderSearch by remember { mutableStateOf("") }
     var clientSearch by remember { mutableStateOf("") }
     var backupMessage by remember { mutableStateOf("") }
+    var deleteMessage by remember { mutableStateOf("") }
+    var pendingDeleteTitle by remember { mutableStateOf("") }
+    var pendingDeleteAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -368,7 +371,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.14") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.16") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -482,6 +485,16 @@ fun ControleQueijosApp(context: Context) {
                                 Button(onClick = { saleDialogProduct = p }) { Text("Registrar venda") }
                                 OutlinedButton(onClick = { orderDialogProduct = p }) { Text("Encomenda") }
                                 OutlinedButton(onClick = { editingProduct = p; productDialog = true }) { Text("Editar") }
+                                TextButton(onClick = {
+                                    val hasOrders = orders.any { it.productId == p.id }
+                                    val hasSales = sales.any { it.productId == p.id }
+                                    if (hasOrders || hasSales) {
+                                        deleteMessage = "Não é possível excluir este produto porque existem encomendas ou vendas vinculadas a ele. Exclua primeiro esses registros."
+                                    } else {
+                                        pendingDeleteTitle = "Excluir produto?"
+                                        pendingDeleteAction = { persistProducts(products.filterNot { it.id == p.id }) }
+                                    }
+                                }) { Text("Excluir") }
                             }
                         }
                     }
@@ -525,7 +538,12 @@ fun ControleQueijosApp(context: Context) {
                                     }, "Compartilhar cliente").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                                 }) { Text("Compartilhar") }
                                 TextButton(onClick = {
-                                    if (clientOrders.isEmpty()) persistClients(clients.filterNot { it.id == client.id })
+                                    if (clientOrders.isEmpty()) {
+                                        pendingDeleteTitle = "Excluir cliente?"
+                                        pendingDeleteAction = { persistClients(clients.filterNot { it.id == client.id }) }
+                                    } else {
+                                        deleteMessage = "Este cliente possui encomendas. Exclua primeiro as encomendas para depois excluir o cadastro do cliente."
+                                    }
                                 }) { Text("Excluir") }
                             }
                         }
@@ -591,11 +609,14 @@ item {
                                 }
                                 OutlinedButton(onClick = { editingOrder = o }) { Text("Editar") }
                                 TextButton(onClick = {
+                                    pendingDeleteTitle = "Excluir encomenda?"
+                                    pendingDeleteAction = {
                                     if (o.stockApplied) {
                                         val p = products.find { it.id == o.productId }
                                         if (p != null) persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity + o.quantity) else it })
                                     }
                                     persistOrders(orders.filterNot { it.id == o.id })
+                                    }
                                 }) { Text("Excluir") }
                             }
                         }
@@ -611,9 +632,12 @@ item {
                             Text("R$ %.2f".format(s.quantity * s.unitValue))
                             Text(dateText(s.date), style = MaterialTheme.typography.bodySmall)
                             TextButton(onClick = {
+                                pendingDeleteTitle = "Excluir venda?"
+                                pendingDeleteAction = {
                                 persistSales(sales.filterNot { it.id == s.id })
                                 val p = products.find { it.id == s.productId }
                                 if (p != null) persistProducts(products.map { if (it.id == p.id) p.copy(quantity = p.quantity + s.quantity) else it })
+                                }
                             }) { Text("Excluir venda e devolver estoque") }
                         }
                     }
@@ -627,7 +651,10 @@ item {
                             Text(e.description)
                             Text("R$ %.2f".format(e.value))
                             Text(dateText(e.date), style = MaterialTheme.typography.bodySmall)
-                            TextButton(onClick = { persistExpenses(expenses.filterNot { it.id == e.id }) }) { Text("Excluir gasto") }
+                            TextButton(onClick = {
+                                pendingDeleteTitle = "Excluir gasto?"
+                                pendingDeleteAction = { persistExpenses(expenses.filterNot { it.id == e.id }) }
+                            }) { Text("Excluir gasto") }
                         }
                     }
                 }
@@ -693,6 +720,31 @@ item {
             persistOrders(updated)
             editingOrder = null
         }
+    }
+
+    if (deleteMessage.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { deleteMessage = "" },
+            title = { Text("Exclusão não realizada") },
+            text = { Text(deleteMessage) },
+            confirmButton = { Button(onClick = { deleteMessage = "" }) { Text("OK") } }
+        )
+    }
+
+    pendingDeleteAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAction = null; pendingDeleteTitle = "" },
+            title = { Text(pendingDeleteTitle) },
+            text = { Text("Esta ação excluirá o registro salvo. Essa operação não pode ser desfeita, a menos que você tenha um backup.") },
+            confirmButton = {
+                Button(onClick = {
+                    action()
+                    pendingDeleteAction = null
+                    pendingDeleteTitle = ""
+                }) { Text("Excluir") }
+            },
+            dismissButton = { OutlinedButton(onClick = { pendingDeleteAction = null; pendingDeleteTitle = "" }) { Text("Cancelar") } }
+        )
     }
 
     if (expenseDialog) ExpenseDialog({ expenseDialog = false }) { description, value ->
