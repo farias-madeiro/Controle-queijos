@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.17 — exclusão visível e gerenciamento de registros
+// V7.18 — transferência segura de dados e restauração protegida
 
 import android.content.Context
 import android.os.Bundle
@@ -52,6 +52,7 @@ private const val SALES = "sales"
 private const val EXPENSE_LIST = "expense_list"
 private const val ORDERS = "orders"
 private const val CLIENTS = "clients"
+private const val PRE_RESTORE_BACKUP = "pre_restore_backup"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,7 +184,8 @@ private fun buildBackupJson(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
-        put("version", 1)
+        put("version", 2)
+        put("appVersion", "V7.18")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -191,6 +193,13 @@ private fun buildBackupJson(context: Context): String {
             put("expenses", JSONArray(prefs.getString(EXPENSE_LIST, "[]")))
             put("orders", JSONArray(prefs.getString(ORDERS, "[]")))
             put("clients", JSONArray(prefs.getString(CLIENTS, "[]")))
+            put("counts", JSONObject().apply {
+                put("products", JSONArray(prefs.getString(PRODUCTS, "[]")).length())
+                put("sales", JSONArray(prefs.getString(SALES, "[]")).length())
+                put("expenses", JSONArray(prefs.getString(EXPENSE_LIST, "[]")).length())
+                put("orders", JSONArray(prefs.getString(ORDERS, "[]")).length())
+                put("clients", JSONArray(prefs.getString(CLIENTS, "[]")).length())
+            })
         })
     }.toString(2)
 }
@@ -198,6 +207,7 @@ private fun buildBackupJson(context: Context): String {
 private fun restoreBackupJson(context: Context, text: String): Result<Unit> = runCatching {
     val root = JSONObject(text)
     require(root.optString("format") == "controle-queijos-backup") { "Arquivo de backup inválido." }
+    require(root.optInt("version", 1) in 1..2) { "Versão de backup não suportada." }
     val data = root.getJSONObject("data")
     val products = JSONArray(data.getJSONArray("products").toString())
     val sales = JSONArray(data.getJSONArray("sales").toString())
@@ -276,6 +286,9 @@ fun ControleQueijosApp(context: Context) {
     var deleteMessage by remember { mutableStateOf("") }
     var pendingDeleteTitle by remember { mutableStateOf("") }
     var pendingDeleteAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingRestoreText by remember { mutableStateOf<String?>(null) }
+    var restoreConfirmation by remember { mutableStateOf(false) }
+    var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -302,12 +315,8 @@ fun ControleQueijosApp(context: Context) {
                     ?: error("Não foi possível abrir o arquivo.")
             }.onSuccess { text ->
                 restoreBackupJson(context, text).onSuccess {
-                    products = loadProducts(context)
-                    sales = loadSales(context)
-                    expenses = loadExpenses(context)
-                    orders = loadOrders(context)
-                    clients = loadClients(context)
-                    backupMessage = "Backup restaurado com sucesso."
+                    pendingRestoreText = text
+                    restoreConfirmation = true
                 }.onFailure {
                     backupMessage = "Backup inválido ou incompatível: ${it.message ?: "erro desconhecido"}"
                 }
@@ -372,7 +381,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.17") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.18") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -736,6 +745,66 @@ item {
             persistOrders(updated)
             editingOrder = null
         }
+    }
+
+    if (restoreConfirmation && pendingRestoreText != null) {
+        AlertDialog(
+            onDismissRequest = { restoreConfirmation = false; pendingRestoreText = null },
+            title = { Text("Confirmar restauração") },
+            text = { Text("Os dados atuais serão substituídos pelos dados do backup. Antes disso, o aplicativo salvará automaticamente um backup de segurança para permitir desfazer esta restauração.") },
+            confirmButton = {
+                Button(onClick = {
+                    val text = pendingRestoreText
+                    if (text != null) {
+                        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                        prefs.edit().putString(PRE_RESTORE_BACKUP, buildBackupJson(context)).apply()
+                        restoreBackupJson(context, text).onSuccess {
+                            products = loadProducts(context)
+                            sales = loadSales(context)
+                            expenses = loadExpenses(context)
+                            orders = loadOrders(context)
+                            clients = loadClients(context)
+                            lastRestoreBackupAvailable = true
+                            backupMessage = "Backup restaurado com sucesso. Um backup de segurança foi criado antes da restauração."
+                        }.onFailure {
+                            backupMessage = "Não foi possível restaurar o backup."
+                        }
+                    }
+                    restoreConfirmation = false
+                    pendingRestoreText = null
+                }) { Text("Restaurar") }
+            },
+            dismissButton = { OutlinedButton(onClick = { restoreConfirmation = false; pendingRestoreText = null }) { Text("Cancelar") } }
+        )
+    }
+
+    if (lastRestoreBackupAvailable) {
+        AlertDialog(
+            onDismissRequest = { lastRestoreBackupAvailable = false },
+            title = { Text("Desfazer última restauração?") },
+            text = { Text("Deseja voltar aos dados que estavam no aplicativo antes da última restauração?") },
+            confirmButton = {
+                Button(onClick = {
+                    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    val previous = prefs.getString(PRE_RESTORE_BACKUP, null)
+                    if (previous != null) {
+                        restoreBackupJson(context, previous).onSuccess {
+                            products = loadProducts(context)
+                            sales = loadSales(context)
+                            expenses = loadExpenses(context)
+                            orders = loadOrders(context)
+                            clients = loadClients(context)
+                            prefs.edit().remove(PRE_RESTORE_BACKUP).apply()
+                            backupMessage = "Restauração desfeita. Os dados anteriores foram recuperados."
+                        }.onFailure {
+                            backupMessage = "Não foi possível recuperar os dados anteriores."
+                        }
+                    }
+                    lastRestoreBackupAvailable = false
+                }) { Text("Desfazer") }
+            },
+            dismissButton = { OutlinedButton(onClick = { lastRestoreBackupAvailable = false }) { Text("Manter") } }
+        )
     }
 
     if (deleteMessage.isNotBlank()) {
