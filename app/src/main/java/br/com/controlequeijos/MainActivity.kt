@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.13 — acompanhamento da produção
+// V7.14 — filtros e acompanhamento aprimorados
 
 import android.content.Context
 import android.os.Bundle
@@ -190,10 +190,20 @@ private fun sameDayOffset(time: Long, offset: Int): Boolean {
     return target.get(Calendar.YEAR) == value.get(Calendar.YEAR) &&
         target.get(Calendar.DAY_OF_YEAR) == value.get(Calendar.DAY_OF_YEAR)
 }
+private fun inNextSevenDays(time: Long): Boolean {
+    val start = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 7) }
+    return time >= start.timeInMillis && time < end.timeInMillis
+}
 private fun inPeriod(time: Long, period: String) = period == "Todos" ||
     (period == "Hoje" && sameDay(time)) ||
     (period == "Amanhã" && sameDayOffset(time, 1)) ||
-    (period == "7 dias" && time >= System.currentTimeMillis() - 6 * 24 * 60 * 60 * 1000L) ||
+    ((period == "7 dias" || period == "Próximos 7 dias") && inNextSevenDays(time)) ||
     (period == "Mês" && sameMonth(time))
 private fun parseDate(text: String, fallback: Long): Long {
     return runCatching { SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).parse(text)?.time ?: fallback }.getOrDefault(fallback)
@@ -253,6 +263,7 @@ fun ControleQueijosApp(context: Context) {
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
+    val normalizedOrderSearch = normalizeSearch(orderSearch)
     val visibleOrders = activeOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
             "Pendentes" -> o.status == "Pendente"
@@ -262,7 +273,7 @@ fun ControleQueijosApp(context: Context) {
             "Entregues" -> o.status == "Entregue"
             else -> true
         }
-        matchesFilter && (orderSearch.isBlank() || o.customerName.contains(orderSearch.trim(), ignoreCase = true) || o.productName.contains(orderSearch.trim(), ignoreCase = true))
+        matchesFilter && (normalizedOrderSearch.isBlank() || normalizeSearch(o.customerName).contains(normalizedOrderSearch) || normalizeSearch(o.productName).contains(normalizedOrderSearch))
     }.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
     val clientsWithBalance = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
@@ -279,7 +290,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.13") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.14") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -346,7 +357,7 @@ fun ControleQueijosApp(context: Context) {
                 item {
                     Text("Período", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Todos", "Hoje", "Amanhã", "7 dias", "Mês").forEach { p ->
+                        listOf("Todos", "Hoje", "Amanhã", "Próximos 7 dias", "Mês").forEach { p ->
                             if (period == p) Button(onClick = { period = p }) { Text(p) }
                             else OutlinedButton(onClick = { period = p }) { Text(p) }
                         }
