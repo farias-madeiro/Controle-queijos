@@ -26,14 +26,15 @@ jobs:
       - name: Prepare signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > app/release.keystore
           test -s app/release.keystore
-          keytool -list -keystore app/release.keystore -storepass "${{ secrets.KEYSTORE_PASSWORD }}" >/dev/null
+          keytool -list -keystore app/release.keystore -storepass "$KEYSTORE_PASSWORD" >/dev/null
 
       - name: Build signed release APK
         env:
-          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PATH: app/release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
