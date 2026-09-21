@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.19 — relatório financeiro compartilhável
+// V7.20 — melhorias e segurança no backup
 
 import android.content.Context
 import android.os.Bundle
@@ -185,7 +185,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.19")
+        put("appVersion", "V7.20")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -314,7 +314,17 @@ fun ControleQueijosApp(context: Context) {
                 context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                     ?: error("Não foi possível abrir o arquivo.")
             }.onSuccess { text ->
-                restoreBackupJson(context, text).onSuccess {
+                runCatching {
+                    val root = JSONObject(text)
+                    require(root.optString("format") == "controle-queijos-backup") { "Arquivo de backup inválido." }
+                    require(root.optInt("version", 1) in 1..2) { "Versão de backup não suportada." }
+                    val data = root.getJSONObject("data")
+                    data.getJSONArray("products")
+                    data.getJSONArray("sales")
+                    data.getJSONArray("expenses")
+                    data.getJSONArray("orders")
+                    data.getJSONArray("clients")
+                }.onSuccess {
                     pendingRestoreText = text
                     restoreConfirmation = true
                 }.onFailure {
@@ -381,7 +391,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.19") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.20") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
