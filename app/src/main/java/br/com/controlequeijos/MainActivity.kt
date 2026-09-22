@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.32")
+        put("appVersion", "V7.33")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -395,7 +395,7 @@ fun ControleQueijosApp(context: Context) {
     val ordersPaid = activeOrders.sumOf { it.paidValue }
     val ordersReceivable = ordersTotal - ordersPaid
     val pendingOrders = activeOrders.filter { it.status == "Pendente" }
-    val overdueOrders = pendingOrders.filter { isOverdue(it.deliveryDate) }
+    val overdueOrders = activeOrders.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
@@ -404,8 +404,8 @@ fun ControleQueijosApp(context: Context) {
         val matchesFilter = when (orderFilter) {
             "Pendentes" -> o.status == "Pendente"
             "Em produção" -> o.status == "Em produção"
-            "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue"
-            "Atrasadas" -> o.status == "Pendente" && isOverdue(o.deliveryDate)
+            "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue" && o.status != "Cancelada"
+            "Atrasadas" -> o.status != "Entregue" && o.status != "Cancelada" && isOverdue(o.deliveryDate)
             "Entregues" -> o.status == "Entregue"
             "Canceladas" -> o.status == "Cancelada"
             else -> true
@@ -447,7 +447,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.30") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.33") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
