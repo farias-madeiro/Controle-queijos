@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.31")
+        put("appVersion", "V7.32")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -676,7 +676,6 @@ fun ControleQueijosApp(context: Context) {
 
                 item {
                     Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall)
-                    Text("Total em aberto: R$ %.2f".format(totalClientBalance))
                     Text("Total a receber de clientes: R$ %.2f".format(totalClientBalance))
                     OutlinedTextField(clientSearch, { clientSearch = it }, label = { Text("Buscar cliente ou telefone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
