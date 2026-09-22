@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.34")
+        put("appVersion", "V7.35")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -447,7 +447,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.34") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.35") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -612,6 +612,30 @@ fun ControleQueijosApp(context: Context) {
                         }, modifier = Modifier.weight(1f)) { Text("Relatório financeiro") }
                     }
                     Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = {
+                        val production = activeOrders.filter { it.status != "Entregue" && it.status != "Cancelada" }
+                        val pendingUnits = production.filter { it.status == "Pendente" }.sumOf { it.quantity }
+                        val productionUnits = production.filter { it.status == "Em produção" }.sumOf { it.quantity }
+                        val totalUnits = production.sumOf { it.quantity }
+                        val summary = buildString {
+                            appendLine("CONTROLE QUEIJOS — RESUMO DE PRODUÇÃO")
+                            appendLine("Período: $period")
+                            appendLine()
+                            appendLine("A produzir: $pendingUnits un.")
+                            appendLine("Em produção: $productionUnits un.")
+                            appendLine("Total pendente de entrega: $totalUnits un.")
+                            appendLine()
+                            production.groupBy { normalizeSearch(it.productName) }
+                                .values
+                                .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
+                                .sortedBy { normalizeSearch(it.first) }
+                                .forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
+                        }
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, summary)
+                        }, "Compartilhar resumo de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Resumo da produção") }
                     OutlinedButton(onClick = {
                         val report = buildOperationalReportText(period, activeOrders)
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
@@ -1205,9 +1229,18 @@ private fun buildReportText(period: String, orders: List<Order>): String {
         }
         .sortedBy { normalizeSearch(it.first) }
 
+    val activeOrders = orders.filter { it.status != "Cancelada" }
+    val pendingUnits = activeOrders.filter { it.status == "Pendente" }.sumOf { it.quantity }
+    val productionUnits = activeOrders.filter { it.status == "Em produção" }.sumOf { it.quantity }
+    val totalUnits = activeOrders.filter { it.status != "Entregue" }.sumOf { it.quantity }
+
     return buildString {
         appendLine("CONTROLE QUEIJOS — LISTA DE PRODUÇÃO")
         appendLine("Período: $period")
+        appendLine()
+        appendLine("A produzir: $pendingUnits un.")
+        appendLine("Em produção: $productionUnits un.")
+        appendLine("Total pendente de entrega: $totalUnits un.")
         appendLine()
         if (productSummary.isEmpty()) {
             appendLine("Nenhuma encomenda no período.")
