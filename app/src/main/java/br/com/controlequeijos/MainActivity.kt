@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.35")
+        put("appVersion", "V7.36")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -322,6 +322,8 @@ fun ControleQueijosApp(context: Context) {
     var pendingRestoreText by remember { mutableStateOf<String?>(null) }
     var restoreConfirmation by remember { mutableStateOf(false) }
     var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup")
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -447,12 +449,19 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.35") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.36") }) }) { pad ->
             LazyColumn(
-                Modifier.fillMaxSize().padding(pad).padding(16.dp),
+                Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
+                    ScrollableTabRow(selectedTabIndex = selectedTab, modifier = Modifier.fillMaxWidth()) {
+                        tabTitles.forEachIndexed { index, title ->
+                            Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
+                        }
+                    }
+                }
+                if (selectedTab == 0) item {
                     Text("Painel", style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(4.dp))
                     DashboardCard("💰 Faturamento", "R$ %.2f".format(revenue))
@@ -475,7 +484,7 @@ fun ControleQueijosApp(context: Context) {
                         Text("📅 Há encomendas previstas para hoje.")
                     }
                 }
-                item {
+                if (selectedTab == 3) item {
                     Text("Agenda de entregas", style = MaterialTheme.typography.headlineSmall)
                     val overdueDeliveries = activeOrders
                         .filter { it.status != "Entregue" && it.status != "Cancelada" && isOverdue(it.deliveryDate) }
@@ -535,7 +544,7 @@ fun ControleQueijosApp(context: Context) {
                         }
                     }
                 }
-                item {
+                if (selectedTab == 4) item {
                     Text("Produção consolidada", style = MaterialTheme.typography.headlineSmall)
                     val productionOrders = activeOrders.filter { it.status != "Entregue" && it.status != "Cancelada" }
                     val productionSummary = productionOrders
@@ -556,7 +565,7 @@ fun ControleQueijosApp(context: Context) {
                         }
                     }
                 }
-                item {
+                if (selectedTab == 5) item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
                     Text("Recebimentos registrados: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
                     Text("Quantidade de recebimentos: " + filteredPayments.size)
@@ -573,7 +582,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
                     Text("A receber: R$ %.2f".format(ordersReceivable))
                 }
-                item {
+                if (selectedTab == 5) item {
                     Text("Relatórios", style = MaterialTheme.typography.headlineSmall)
                     Text("Vendas: R$ %.2f".format(saleRevenue))
                     Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
@@ -644,7 +653,7 @@ fun ControleQueijosApp(context: Context) {
                         }, "Compartilhar relatório operacional").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }, modifier = Modifier.fillMaxWidth()) { Text("Relatório operacional") }
                 }
-                item {
+                if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
                     Text("O backup guarda clientes, encomendas, vendas e gastos em um arquivo JSON. O formato foi preparado para facilitar uma futura versão iOS.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -670,19 +679,19 @@ fun ControleQueijosApp(context: Context) {
                         }
                     }
                 }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { editingProduct = null; productDialog = true }) { Text("Cadastrar produto") }
-                        OutlinedButton(onClick = { expenseDialog = true }) { Text("Novo gasto") }
-                    }
-                    Spacer(Modifier.height(6.dp))
+                if (selectedTab == 2) item {
+                    Button(onClick = { editingProduct = null; productDialog = true }) { Text("Cadastrar produto") }
+                }
+                if (selectedTab == 1) item {
                     Button(onClick = { editingClient = null; clientDialog = true }) { Text("Cadastrar cliente") }
-                    OutlinedButton(onClick = { /* lista abaixo */ }) { Text("Clientes: " + clients.size) }
+                }
+                if (selectedTab == 5) item {
+                    OutlinedButton(onClick = { expenseDialog = true }) { Text("Novo gasto") }
                 }
 
-                item { Text("Produtos / Catálogo", style = MaterialTheme.typography.headlineSmall) }
-                if (products.isEmpty()) item { Text("Nenhum produto cadastrado.") }
-                items(products, key = { it.id }) { p ->
+                if (selectedTab == 2) item { Text("Produtos / Catálogo", style = MaterialTheme.typography.headlineSmall) }
+                if (selectedTab == 2 && products.isEmpty()) item { Text("Nenhum produto cadastrado.") }
+                if (selectedTab == 2) items(products, key = { it.id }) { p ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(p.name, style = MaterialTheme.typography.titleMedium)
@@ -712,7 +721,7 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
 
-                item {
+                if (selectedTab == 1) item {
                     Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall)
                     Text("Total a receber de clientes: R$ %.2f".format(totalClientBalance))
                     OutlinedTextField(clientSearch, { clientSearch = it }, label = { Text("Buscar cliente ou telefone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -724,8 +733,8 @@ fun ControleQueijosApp(context: Context) {
                     }
                     Text("Exibindo: " + visibleClients.size + " cliente(s)")
                 }
-                if (clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
-                items(visibleClients, key = { it.id }) { client ->
+                if (selectedTab == 1 && clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
+                if (selectedTab == 1) items(visibleClients, key = { it.id }) { client ->
                     val clientOrders = orders.filter { it.status != "Cancelada" && (it.customerId == client.id || (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name))) }.sortedByDescending { it.orderDate }
                     val total = clientOrders.sumOf { it.totalValue }
                     val paid = clientOrders.sumOf { it.paidValue }
@@ -779,7 +788,7 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
 
-item {
+if (selectedTab == 2) item {
                     Text("Encomendas", style = MaterialTheme.typography.headlineSmall)
                     OutlinedTextField(
                         value = orderSearch,
@@ -796,8 +805,8 @@ item {
                     }
                     Text("Exibindo: " + visibleOrders.size + " encomenda(s)")
                 }
-                if (visibleOrders.isEmpty()) item { Text("Nenhuma encomenda encontrada.") }
-                items(visibleOrders, key = { it.id }) { o ->
+                if (selectedTab == 2 && visibleOrders.isEmpty()) item { Text("Nenhuma encomenda encontrada.") }
+                if (selectedTab == 2) items(visibleOrders, key = { it.id }) { o ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(o.customerName, style = MaterialTheme.typography.titleMedium)
@@ -860,9 +869,9 @@ item {
                     }
                 }
 
-                item { Text("Vendas registradas (" + filteredSales.size + ")", style = MaterialTheme.typography.headlineSmall) }
-                if (filteredSales.isEmpty()) item { Text("Nenhuma venda no período.") }
-                items(filteredSales.sortedByDescending { it.date }, key = { it.id }) { s ->
+                if (selectedTab == 5) item { Text("Vendas registradas (" + filteredSales.size + ")", style = MaterialTheme.typography.headlineSmall) }
+                if (selectedTab == 5 && filteredSales.isEmpty()) item { Text("Nenhuma venda no período.") }
+                if (selectedTab == 5) items(filteredSales.sortedByDescending { it.date }, key = { it.id }) { s ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp)) {
                             Text(s.productName + " — " + s.quantity + " un.")
@@ -883,9 +892,9 @@ item {
                     }
                 }
 
-                item { Text("Gastos registrados (" + filteredExpenses.size + ")", style = MaterialTheme.typography.headlineSmall) }
-                if (filteredExpenses.isEmpty()) item { Text("Nenhum gasto no período.") }
-                items(filteredExpenses.sortedByDescending { it.date }, key = { it.id }) { e ->
+                if (selectedTab == 5) item { Text("Gastos registrados (" + filteredExpenses.size + ")", style = MaterialTheme.typography.headlineSmall) }
+                if (selectedTab == 5 && filteredExpenses.isEmpty()) item { Text("Nenhum gasto no período.") }
+                if (selectedTab == 5) items(filteredExpenses.sortedByDescending { it.date }, key = { it.id }) { e ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp)) {
                             Text(e.description)
