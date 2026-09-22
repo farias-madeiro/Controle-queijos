@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.29")
+        put("appVersion", "V7.31")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -481,18 +481,48 @@ fun ControleQueijosApp(context: Context) {
                         .filter { it.status != "Entregue" }
                         .filter { inNextSevenDays(it.deliveryDate) }
                         .sortedBy { it.deliveryDate }
+
+                    val todayDeliveries = nextDeliveries.filter { sameDay(it.deliveryDate) }
+                    val tomorrowDeliveries = nextDeliveries.filter { sameDayOffset(it.deliveryDate, 1) }
+                    val laterDeliveries = nextDeliveries.filter {
+                        !sameDay(it.deliveryDate) && !sameDayOffset(it.deliveryDate, 1)
+                    }
+
                     if (nextDeliveries.isEmpty()) {
                         Text("Nenhuma entrega prevista nos próximos 7 dias.")
                     } else {
-                        nextDeliveries.take(12).forEach { order ->
-                            Text(
-                                dateOnly(order.deliveryDate) + " • " + order.customerName + " • " +
-                                    order.productName + " • " + order.quantity + " un. • " + order.status,
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                        if (todayDeliveries.isNotEmpty()) {
+                            Text("HOJE — " + todayDeliveries.size + " entrega(s)", style = MaterialTheme.typography.labelLarge)
+                            todayDeliveries.take(6).forEach { order ->
+                                Text(
+                                    "• " + order.customerName + " • " + order.productName + " • " +
+                                        order.quantity + " un. • " + order.status,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
-                        if (nextDeliveries.size > 12) {
-                            Text("Mais " + (nextDeliveries.size - 12) + " entrega(s) na próxima semana.")
+                        if (tomorrowDeliveries.isNotEmpty()) {
+                            Text("AMANHÃ — " + tomorrowDeliveries.size + " entrega(s)", style = MaterialTheme.typography.labelLarge)
+                            tomorrowDeliveries.take(6).forEach { order ->
+                                Text(
+                                    "• " + order.customerName + " • " + order.productName + " • " +
+                                        order.quantity + " un. • " + order.status,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        if (laterDeliveries.isNotEmpty()) {
+                            Text("PRÓXIMOS DIAS — " + laterDeliveries.size + " entrega(s)", style = MaterialTheme.typography.labelLarge)
+                            laterDeliveries.take(6).forEach { order ->
+                                Text(
+                                    "• " + dateOnly(order.deliveryDate) + " • " + order.customerName + " • " +
+                                        order.productName + " • " + order.quantity + " un. • " + order.status,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        if (nextDeliveries.size > 18) {
+                            Text("Mais " + (nextDeliveries.size - 18) + " entrega(s) na próxima semana.")
                         }
                     }
                 }
