@@ -513,7 +513,8 @@ fun ControleQueijosApp(context: Context) {
                             val report = buildFinancialReportText(
                                 period, saleRevenue, orderRevenue, cost, expenseTotal,
                                 profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
-                                pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size
+                                pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size,
+                                filteredPayments.sumOf { it.amount }, filteredPayments.size
                             )
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -521,6 +522,14 @@ fun ControleQueijosApp(context: Context) {
                             }, "Compartilhar relatório financeiro").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         }, modifier = Modifier.weight(1f)) { Text("Relatório financeiro") }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = {
+                        val report = buildOperationalReportText(period, activeOrders)
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }, "Compartilhar relatório operacional").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Relatório operacional") }
                 }
                 item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
@@ -999,7 +1008,9 @@ private fun buildFinancialReportText(
     pending: Int,
     production: Int,
     overdue: Int,
-    dueToday: Int
+    dueToday: Int,
+    paymentsReceived: Double,
+    paymentCount: Int
 ): String = buildString {
     appendLine("CONTROLE QUEIJOS — RELATÓRIO FINANCEIRO")
     appendLine("Período: " + period)
@@ -1022,6 +1033,34 @@ private fun buildFinancialReportText(
     appendLine("Em produção: " + production)
     appendLine("Entregas atrasadas: " + overdue)
     appendLine("Entregas previstas para hoje: " + dueToday)
+}
+
+private fun buildOperationalReportText(period: String, orders: List<Order>): String {
+    val active = orders.filter { it.status != "Cancelada" }
+    val pending = active.filter { it.status == "Pendente" }
+    val production = active.filter { it.status == "Em produção" }
+    val delivered = active.filter { it.status == "Entregue" }
+    val overdue = active.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+    val dueToday = active.filter { it.status != "Entregue" && sameDay(it.deliveryDate) }
+    val productSummary = active.groupBy { normalizeSearch(it.productName) }.values
+        .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
+        .sortedBy { normalizeSearch(it.first) }
+
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — RELATÓRIO OPERACIONAL")
+        appendLine("Período: $period")
+        appendLine()
+        appendLine("Encomendas: " + active.size)
+        appendLine("Pendentes: " + pending.size)
+        appendLine("Em produção: " + production.size)
+        appendLine("Entregues: " + delivered.size)
+        appendLine("Atrasadas: " + overdue.size)
+        appendLine("Para hoje: " + dueToday.size)
+        appendLine()
+        appendLine("PRODUÇÃO POR PRODUTO")
+        if (productSummary.isEmpty()) appendLine("Nenhuma encomenda no período.")
+        else productSummary.forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
+    }
 }
 
 private fun buildReportText(period: String, orders: List<Order>): String {
