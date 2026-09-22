@@ -1015,6 +1015,8 @@ private fun buildFinancialReportText(
     appendLine("Encomendas no período: R$ %.2f".format(ordersTotal))
     appendLine("Recebido: R$ %.2f".format(ordersPaid))
     appendLine("A receber: R$ %.2f".format(receivable))
+    val recebimento = if (ordersTotal > 0.005) (ordersPaid / ordersTotal * 100.0).coerceIn(0.0, 100.0) else 0.0
+    appendLine("Percentual recebido: %.2f%%".format(recebimento))
     appendLine()
     appendLine("Encomendas pendentes: " + pending)
     appendLine("Em produção: " + production)
