@@ -309,6 +309,7 @@ fun ControleQueijosApp(context: Context) {
     var clientDialog by remember { mutableStateOf(false) }
     var editingClient by remember { mutableStateOf<Client?>(null) }
     var paymentOrder by remember { mutableStateOf<Order?>(null) }
+    var statementClient by remember { mutableStateOf<Client?>(null) }
     var period by remember { mutableStateOf("Todos") }
     var orderFilter by remember { mutableStateOf("Todas") }
     var orderSearch by remember { mutableStateOf("") }
@@ -644,12 +645,14 @@ fun ControleQueijosApp(context: Context) {
                             if (client.notes.isNotBlank()) Text("Obs.: " + client.notes)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = { editingClient = client; clientDialog = true }) { Text("Editar") }
+                                OutlinedButton(onClick = { statementClient = client }) { Text("Extrato") }
                                 OutlinedButton(onClick = {
-                                    val message = buildClientMessage(client, clientOrders, total, paid)
+                                    val clientPaymentHistory = payments.filter { p -> clientOrders.any { it.id == p.orderId } }.sortedByDescending { it.date }
+                                    val message = buildClientStatementMessage(client, clientOrders, clientPaymentHistory)
                                     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, message)
-                                    }, "Compartilhar cliente").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }, "Compartilhar extrato").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                                 }) { Text("Compartilhar") }
                             }
                             OutlinedButton(
@@ -917,6 +920,12 @@ item {
         )
     }
 
+    statementClient?.let { client ->
+        val clientOrders = orders.filter { it.status != "Cancelada" && (it.customerId == client.id || (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name))) }
+        val clientPayments = payments.filter { p -> clientOrders.any { it.id == p.orderId } }
+        ClientStatementDialog(client, clientOrders, clientPayments) { statementClient = null }
+    }
+
     if (deleteMessage.isNotBlank()) {
         AlertDialog(
             onDismissRequest = { deleteMessage = "" },
@@ -978,6 +987,32 @@ private fun buildOrderMessage(order: Order): String {
     }
 }
 
+
+private fun buildClientStatementMessage(client: Client, orders: List<Order>, payments: List<Payment>): String {
+    val total = orders.sumOf { it.totalValue }
+    val paid = payments.sumOf { it.amount }
+    val balance = (total - paid).coerceAtLeast(0.0)
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — EXTRATO DO CLIENTE")
+        appendLine()
+        appendLine("Cliente: " + client.name)
+        if (client.phone.isNotBlank()) appendLine("Telefone: " + client.phone)
+        appendLine("Total das encomendas: R$ %.2f".format(total))
+        appendLine("Recebimentos registrados: R$ %.2f".format(paid))
+        appendLine("Saldo pendente: R$ %.2f".format(balance))
+        appendLine()
+        appendLine("RECEBIMENTOS")
+        if (payments.isEmpty()) appendLine("Nenhum recebimento registrado.")
+        else payments.sortedByDescending { it.date }.forEach { p ->
+            appendLine(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "")
+        }
+        appendLine()
+        appendLine("ENCOMENDAS")
+        orders.sortedByDescending { it.orderDate }.forEach { order ->
+            appendLine(dateOnly(order.orderDate) + " — " + order.productName + " — " + order.quantity + " un. — R$ %.2f — ".format(order.totalValue) + order.status)
+        }
+    }
+}
 
 private fun buildClientMessage(client: Client, orders: List<Order>, total: Double, paid: Double): String {
     val balance = (total - paid).coerceAtLeast(0.0)
@@ -1099,6 +1134,34 @@ private fun buildReportText(period: String, orders: List<Order>): String {
     }
 }
 
+
+@Composable
+private fun ClientStatementDialog(client: Client, orders: List<Order>, payments: List<Payment>, onDismiss: () -> Unit) {
+    val total = orders.sumOf { it.totalValue }
+    val paid = payments.sumOf { it.amount }
+    val balance = (total - paid).coerceAtLeast(0.0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Extrato — " + client.name) },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item { Text("Total das encomendas: R$ %.2f".format(total)) }
+                item { Text("Recebimentos registrados: R$ %.2f".format(paid)) }
+                item { Text("Saldo pendente: R$ %.2f".format(balance)) }
+                item { Spacer(Modifier.height(4.dp)); Text("HISTÓRICO DE RECEBIMENTOS", style = MaterialTheme.typography.labelLarge) }
+                if (payments.isEmpty()) item { Text("Nenhum recebimento registrado.") }
+                else payments.sortedByDescending { it.date }.forEach { p ->
+                    item { Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "") }
+                }
+                item { Spacer(Modifier.height(4.dp)); Text("HISTÓRICO DE ENCOMENDAS", style = MaterialTheme.typography.labelLarge) }
+                orders.sortedByDescending { it.orderDate }.forEach { order ->
+                    item { Text(dateOnly(order.orderDate) + " • " + order.productName + " • " + order.quantity + " un. • R$ %.2f • ".format(order.totalValue) + order.status) }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
+    )
+}
 
 @Composable
 private fun ClientDialog(client: Client?, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
