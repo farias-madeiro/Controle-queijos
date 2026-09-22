@@ -27,6 +27,7 @@ import java.util.Locale
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
 data class Sale(val id: Long, val productId: Long, val productName: String, val quantity: Int, val unitValue: Double, val unitCost: Double, val date: Long)
 data class Expense(val id: Long, val description: String, val value: Double, val date: Long)
+data class Payment(val id: Long, val orderId: Long, val amount: Double, val date: Long, val note: String)
 data class Client(val id: Long, val name: String, val phone: String, val notes: String)
 data class Order(
     val id: Long,
@@ -50,6 +51,7 @@ private const val PRODUCTS = "products"
 private const val EXPENSES_OLD = "expenses"
 private const val SALES = "sales"
 private const val EXPENSE_LIST = "expense_list"
+private const val PAYMENTS = "payments"
 private const val ORDERS = "orders"
 private const val CLIENTS = "clients"
 private const val PRE_RESTORE_BACKUP = "pre_restore_backup"
@@ -130,6 +132,30 @@ private fun saveExpenses(context: Context, expenses: List<Expense>) {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(EXPENSE_LIST, json.toString()).apply()
 }
 
+private fun loadPayments(context: Context): List<Payment> = runCatching {
+    val json = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PAYMENTS, "[]"))
+    List(json.length()) { i ->
+        val o = json.getJSONObject(i)
+        Payment(
+            o.getLong("id"),
+            o.getLong("orderId"),
+            o.getDouble("amount"),
+            o.getLong("date"),
+            o.optString("note", "")
+        )
+    }
+}.getOrDefault(emptyList())
+
+private fun savePayments(context: Context, payments: List<Payment>) {
+    val json = JSONArray()
+    payments.forEach { p ->
+        json.put(JSONObject().apply {
+            put("id", p.id); put("orderId", p.orderId); put("amount", p.amount); put("date", p.date); put("note", p.note)
+        })
+    }
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(PAYMENTS, json.toString()).apply()
+}
+
 private fun loadClients(context: Context): List<Client> = runCatching {
     val json = JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(CLIENTS, "[]"))
     List(json.length()) { i ->
@@ -185,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.20")
+        put("appVersion", "V7.24")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -193,12 +219,14 @@ private fun buildBackupJson(context: Context): String {
             put("expenses", JSONArray(prefs.getString(EXPENSE_LIST, "[]")))
             put("orders", JSONArray(prefs.getString(ORDERS, "[]")))
             put("clients", JSONArray(prefs.getString(CLIENTS, "[]")))
+            put("payments", JSONArray(prefs.getString(PAYMENTS, "[]")))
             put("counts", JSONObject().apply {
                 put("products", JSONArray(prefs.getString(PRODUCTS, "[]")).length())
                 put("sales", JSONArray(prefs.getString(SALES, "[]")).length())
                 put("expenses", JSONArray(prefs.getString(EXPENSE_LIST, "[]")).length())
                 put("orders", JSONArray(prefs.getString(ORDERS, "[]")).length())
                 put("clients", JSONArray(prefs.getString(CLIENTS, "[]")).length())
+                put("payments", JSONArray(prefs.getString(PAYMENTS, "[]")).length())
             })
         })
     }.toString(2)
@@ -214,12 +242,14 @@ private fun restoreBackupJson(context: Context, text: String): Result<Unit> = ru
     val expenses = JSONArray(data.getJSONArray("expenses").toString())
     val orders = JSONArray(data.getJSONArray("orders").toString())
     val clients = JSONArray(data.getJSONArray("clients").toString())
+    val payments = if (data.has("payments")) JSONArray(data.getJSONArray("payments").toString()) else JSONArray()
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         .putString(PRODUCTS, products.toString())
         .putString(SALES, sales.toString())
         .putString(EXPENSE_LIST, expenses.toString())
         .putString(ORDERS, orders.toString())
         .putString(CLIENTS, clients.toString())
+        .putString(PAYMENTS, payments.toString())
         .apply()
 }
 
@@ -269,6 +299,7 @@ fun ControleQueijosApp(context: Context) {
     var expenses by remember { mutableStateOf(loadExpenses(context)) }
     var orders by remember { mutableStateOf(loadOrders(context)) }
     var clients by remember { mutableStateOf(loadClients(context)) }
+    var payments by remember { mutableStateOf(loadPayments(context)) }
     var productDialog by remember { mutableStateOf(false) }
     var saleDialogProduct by remember { mutableStateOf<Product?>(null) }
     var orderDialogProduct by remember { mutableStateOf<Product?>(null) }
@@ -325,6 +356,7 @@ fun ControleQueijosApp(context: Context) {
                     data.getJSONArray("expenses")
                     data.getJSONArray("orders")
                     data.getJSONArray("clients")
+                    if (data.has("payments")) data.getJSONArray("payments")
                 }.onSuccess {
                     pendingRestoreText = text
                     restoreConfirmation = true
@@ -342,6 +374,7 @@ fun ControleQueijosApp(context: Context) {
     fun persistExpenses(e: List<Expense>) { expenses = e; saveExpenses(context, e) }
     fun persistOrders(o: List<Order>) { orders = o; saveOrders(context, o) }
     fun persistClients(c: List<Client>) { clients = c; saveClients(context, c) }
+    fun persistPayments(p: List<Payment>) { payments = p; savePayments(context, p) }
 
     val filteredSales = sales.filter { inPeriod(it.date, period) }
     val filteredExpenses = expenses.filter { inPeriod(it.date, period) }
@@ -412,7 +445,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.20") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.24") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -581,6 +614,11 @@ fun ControleQueijosApp(context: Context) {
                             Text("Compras/encomendas: " + clientOrders.size)
                             Text("Total: R$ %.2f | Recebido: R$ %.2f".format(total, paid))
                             Text("Saldo: R$ %.2f".format((total - paid).coerceAtLeast(0.0)))
+                            val clientPayments = payments.filter { p -> clientOrders.any { it.id == p.orderId } }.sortedByDescending { it.date }
+                            if (clientPayments.isNotEmpty()) {
+                                Text("Recebimentos", style = MaterialTheme.typography.labelLarge)
+                                clientPayments.take(10).forEach { p -> Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "", style = MaterialTheme.typography.bodySmall) }
+                            }
                             if (clientOrders.isNotEmpty()) {
                                 Text("Histórico de encomendas", style = MaterialTheme.typography.labelLarge)
                                 clientOrders.forEach { order ->
@@ -642,6 +680,11 @@ item {
                             Text(o.productName + " — " + o.quantity + " un.")
                             Text("Total: R$ %.2f".format(o.totalValue))
                             Text("Pago: R$ %.2f | Saldo: R$ %.2f".format(o.paidValue, o.totalValue - o.paidValue))
+                            val orderPayments = payments.filter { it.orderId == o.id }.sortedByDescending { it.date }
+                            if (orderPayments.isNotEmpty()) {
+                                Text("Histórico de pagamentos", style = MaterialTheme.typography.labelLarge)
+                                orderPayments.take(5).forEach { p -> Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "", style = MaterialTheme.typography.bodySmall) }
+                            }
                             Text("Pedido: " + dateOnly(o.orderDate) + " | Entrega: " + dateOnly(o.deliveryDate))
                             Text("Status: " + o.status + if (o.status == "Pendente" && isOverdue(o.deliveryDate)) " • ATRASADA" else "")
                             Text(
@@ -746,10 +789,11 @@ item {
     }
 
     paymentOrder?.let { o ->
-        PaymentDialog(o, { paymentOrder = null }) { amount ->
+        PaymentDialog(o, { paymentOrder = null }) { amount, note ->
             val remaining = (o.totalValue - o.paidValue).coerceAtLeast(0.0)
             val newPaid = (o.paidValue + amount).coerceAtMost(o.totalValue)
             persistOrders(orders.map { if (it.id == o.id) o.copy(paidValue = newPaid) else it })
+            persistPayments(payments + Payment(System.currentTimeMillis(), o.id, amount, System.currentTimeMillis(), note))
             paymentOrder = null
         }
     }
@@ -777,6 +821,7 @@ item {
             val customerId = clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(customer) }?.id ?: 0L
             val order = Order(now, customerId, customer, p.id, p.name, q, p.exitValue, p.entryValue, total, paid.coerceIn(0.0, total), now, delivery, "Pendente", false)
             persistOrders(orders + order)
+            if (order.paidValue > 0.005) persistPayments(payments + Payment(System.currentTimeMillis(), order.id, order.paidValue, System.currentTimeMillis(), "Pagamento inicial"))
             orderDialogProduct = null
         }
     }
@@ -815,6 +860,7 @@ item {
                             expenses = loadExpenses(context)
                             orders = loadOrders(context)
                             clients = loadClients(context)
+                            payments = loadPayments(context)
                             lastRestoreBackupAvailable = true
                             backupMessage = "Backup restaurado com sucesso. Um backup de segurança foi criado antes da restauração."
                         }.onFailure {
@@ -845,6 +891,7 @@ item {
                             expenses = loadExpenses(context)
                             orders = loadOrders(context)
                             clients = loadClients(context)
+                            payments = loadPayments(context)
                             prefs.edit().remove(PRE_RESTORE_BACKUP).apply()
                             backupMessage = "Restauração desfeita. Os dados anteriores foram recuperados."
                         }.onFailure {
@@ -1025,8 +1072,9 @@ private fun ClientDialog(client: Client?, onDismiss: () -> Unit, onSave: (String
 }
 
 @Composable
-private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
     var value by remember(order) { mutableStateOf("") }
+    var note by remember(order) { mutableStateOf("") }
     val remaining = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1036,12 +1084,13 @@ private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double) 
                 Text("Cliente: " + order.customerName)
                 Text("Saldo atual: R$ %.2f".format(remaining))
                 OutlinedTextField(value, { value = it.replace(",", ".") }, label = { Text("Valor recebido") }, singleLine = true)
+                OutlinedTextField(note, { note = it }, label = { Text("Observação (opcional)") }, singleLine = true)
             }
         },
         confirmButton = {
             Button(onClick = {
                 val amount = value.toDoubleOrNull() ?: 0.0
-                if (amount > 0 && amount <= remaining + 0.005) onSave(amount)
+                if (amount > 0 && amount <= remaining + 0.005) onSave(amount, note.trim())
             }) { Text("Registrar") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
