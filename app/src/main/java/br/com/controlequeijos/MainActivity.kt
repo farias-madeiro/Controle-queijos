@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.33")
+        put("appVersion", "V7.34")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -447,7 +447,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.33") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.34") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -537,12 +537,17 @@ fun ControleQueijosApp(context: Context) {
                 }
                 item {
                     Text("Produção consolidada", style = MaterialTheme.typography.headlineSmall)
-                    val productionSummary = activeOrders
-                        .filter { it.status != "Entregue" && it.status != "Cancelada" }
+                    val productionOrders = activeOrders.filter { it.status != "Entregue" && it.status != "Cancelada" }
+                    val productionSummary = productionOrders
                         .groupBy { normalizeSearch(it.productName) }
                         .values
                         .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
                         .sortedBy { normalizeSearch(it.first) }
+                    val pendingUnits = productionOrders.filter { it.status == "Pendente" }.sumOf { it.quantity }
+                    val productionUnits = productionOrders.filter { it.status == "Em produção" }.sumOf { it.quantity }
+                    Text("A produzir: $pendingUnits un.")
+                    Text("Em produção: $productionUnits un.")
+                    Text("Total pendente de entrega: ${productionOrders.sumOf { it.quantity }} un.")
                     if (productionSummary.isEmpty()) {
                         Text("Nenhum produto pendente de produção/entrega.")
                     } else {
@@ -781,7 +786,7 @@ item {
                                 orderPayments.take(5).forEach { p -> Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "", style = MaterialTheme.typography.bodySmall) }
                             }
                             Text("Pedido: " + dateOnly(o.orderDate) + " | Entrega: " + dateOnly(o.deliveryDate))
-                            Text("Status: " + o.status + if (o.status == "Pendente" && isOverdue(o.deliveryDate)) " • ATRASADA" else "")
+                            Text("Status: " + o.status + if (o.status != "Entregue" && o.status != "Cancelada" && isOverdue(o.deliveryDate)) " • ATRASADA" else "")
                             Text(
                                 if (o.totalValue - o.paidValue <= 0.005) "Pagamento: QUITADO"
                                 else "Pagamento: PENDENTE — R$ %.2f".format(o.totalValue - o.paidValue)
