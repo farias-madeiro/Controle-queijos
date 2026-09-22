@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.37")
+        put("appVersion", "V7.38")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -313,6 +313,7 @@ fun ControleQueijosApp(context: Context) {
     var period by remember { mutableStateOf("Todos") }
     var orderFilter by remember { mutableStateOf("Todas") }
     var orderSearch by remember { mutableStateOf("") }
+    var orderSort by remember { mutableStateOf("Entrega") }
     var clientSearch by remember { mutableStateOf("") }
     var clientFilter by remember { mutableStateOf("Todos") }
     var backupMessage by remember { mutableStateOf("") }
@@ -402,7 +403,7 @@ fun ControleQueijosApp(context: Context) {
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
     val normalizedOrderSearch = normalizeSearch(orderSearch)
-    val visibleOrders = filteredOrders.filter { o ->
+    val filteredVisibleOrders = filteredOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
             "Pendentes" -> o.status == "Pendente"
             "Em produção" -> o.status == "Em produção"
@@ -413,7 +414,20 @@ fun ControleQueijosApp(context: Context) {
             else -> true
         }
         matchesFilter && (normalizedOrderSearch.isBlank() || normalizeSearch(o.customerName).contains(normalizedOrderSearch) || normalizeSearch(o.productName).contains(normalizedOrderSearch))
-    }.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
+    }
+    val visibleOrders = when (orderSort) {
+        "Cliente" -> filteredVisibleOrders.sortedBy { normalizeSearch(it.customerName) }
+        "Produto" -> filteredVisibleOrders.sortedBy { normalizeSearch(it.productName) }
+        "Mais recentes" -> filteredVisibleOrders.sortedByDescending { it.orderDate }
+        else -> filteredVisibleOrders.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
+    }
+    val orderStatusCounts = mapOf(
+        "Pendentes" to filteredOrders.count { it.status == "Pendente" },
+        "Em produção" to filteredOrders.count { it.status == "Em produção" },
+        "Entregues" to filteredOrders.count { it.status == "Entregue" },
+        "Canceladas" to filteredOrders.count { it.status == "Cancelada" },
+        "Atrasadas" to filteredOrders.count { it.status != "Entregue" && it.status != "Cancelada" && isOverdue(it.deliveryDate) }
+    )
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
     val clientsWithBalance = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
     val searchText = normalizeSearch(clientSearch)
@@ -449,7 +463,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.37") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.38") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -856,6 +870,18 @@ if (selectedTab == 2) item {
                         }
                     }
                     Text("Exibindo: " + visibleOrders.size + " encomenda(s)")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("Entrega", "Mais recentes", "Cliente", "Produto").forEach { s ->
+                            if (orderSort == s) Button(onClick = { orderSort = s }) { Text(s) }
+                            else OutlinedButton(onClick = { orderSort = s }) { Text(s) }
+                        }
+                    }
+                    Text(
+                        "Pendentes: " + orderStatusCounts["Pendentes"] + " • Em produção: " + orderStatusCounts["Em produção"] +
+                            " • Entregues: " + orderStatusCounts["Entregues"] + " • Atrasadas: " + orderStatusCounts["Atrasadas"] +
+                            " • Canceladas: " + orderStatusCounts["Canceladas"],
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 if (selectedTab == 2 && visibleOrders.isEmpty()) item { Text("Nenhuma encomenda encontrada.") }
                 if (selectedTab == 2) items(visibleOrders, key = { it.id }) { o ->
