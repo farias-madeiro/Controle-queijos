@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.36")
+        put("appVersion", "V7.37")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -449,7 +449,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.36") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.37") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -462,26 +462,78 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
                 if (selectedTab == 0) item {
-                    Text("Painel", style = MaterialTheme.typography.headlineSmall)
+                    Text("Painel de controle", style = MaterialTheme.typography.headlineSmall)
+                    Text("Visão rápida do seu negócio", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(4.dp))
-                    DashboardCard("💰 Faturamento", "R$ %.2f".format(revenue))
-                    DashboardCard("📈 Lucro líquido", "R$ %.2f".format(profit))
-                    DashboardCard("💳 Total a receber", "R$ %.2f".format(ordersReceivable))
-                    DashboardCard("📥 Recebido no período", "R$ %.2f".format(filteredPayments.sumOf { it.amount }))
-                    DashboardCard("⚠️ Clientes com saldo", clientsWithBalance.toString())
-                    DashboardCard("📋 Encomendas pendentes", pendingOrders.size.toString())
-                    DashboardCard("🏭 Em produção", productionOrders.size.toString())
-                    DashboardCard("💵 Valor das pendentes", "R$ %.2f".format(pendingOrdersValue))
-                    DashboardCard("📅 Entregas hoje", dueTodayOrders.size.toString())
-                    DashboardCard("⚠️ Entregas atrasadas", overdueOrders.size.toString())
-                    DashboardCard("✅ Encomendas entregues", deliveredOrdersCount.toString())
-                    DashboardCard("👥 Clientes", clients.size.toString())
-                    
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("💰 Resumo financeiro", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento: R$ %.2f".format(revenue))
+                            Text("Lucro líquido: R$ %.2f".format(profit))
+                            Text("Recebido no período: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
+                            Text("A receber: R$ %.2f".format(ordersReceivable))
+                            Text("Gastos: R$ %.2f".format(expenseTotal))
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) {
+                            Text("📋 Pendentes", style = MaterialTheme.typography.labelLarge)
+                            Text(pendingOrders.size.toString(), style = MaterialTheme.typography.headlineSmall)
+                        }}
+                        Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) {
+                            Text("🏭 Produção", style = MaterialTheme.typography.labelLarge)
+                            Text(productionOrders.size.toString(), style = MaterialTheme.typography.headlineSmall)
+                        }}
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) {
+                            Text("📅 Hoje", style = MaterialTheme.typography.labelLarge)
+                            Text(dueTodayOrders.size.toString(), style = MaterialTheme.typography.headlineSmall)
+                        }}
+                        Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) {
+                            Text("⚠️ Atrasadas", style = MaterialTheme.typography.labelLarge)
+                            Text(overdueOrders.size.toString(), style = MaterialTheme.typography.headlineSmall)
+                        }}
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) {
+                            Text("👥 Clientes", style = MaterialTheme.typography.labelLarge)
+                            Text(clients.size.toString(), style = MaterialTheme.typography.headlineSmall)
+                        }}
+                        Card(Modifier.weight(1f)) { Column(Modifier.padding(12.dp)) {
+                            Text("✅ Entregues", style = MaterialTheme.typography.labelLarge)
+                            Text(deliveredOrdersCount.toString(), style = MaterialTheme.typography.headlineSmall)
+                        }}
+                    }
+
                     if (overdueOrders.isNotEmpty()) {
-                        Text("⚠️ Há encomendas com entrega atrasada.", color = MaterialTheme.colorScheme.error)
+                        Card(Modifier.fillMaxWidth()) {
+                            Text(
+                                "⚠️ ${overdueOrders.size} encomenda(s) com entrega atrasada.",
+                                modifier = Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                     if (dueTodayOrders.isNotEmpty()) {
-                        Text("📅 Há encomendas previstas para hoje.")
+                        Card(Modifier.fillMaxWidth()) {
+                            Text(
+                                "📅 ${dueTodayOrders.size} entrega(s) prevista(s) para hoje.",
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+
+                    Text("Atalhos rápidos", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { selectedTab = 2 }, modifier = Modifier.weight(1f)) { Text("📦 Encomendas") }
+                        Button(onClick = { selectedTab = 1 }, modifier = Modifier.weight(1f)) { Text("👥 Clientes") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { selectedTab = 5 }, modifier = Modifier.weight(1f)) { Text("💰 Financeiro") }
+                        OutlinedButton(onClick = { selectedTab = 3 }, modifier = Modifier.weight(1f)) { Text("🚚 Entregas") }
                     }
                 }
                 if (selectedTab == 3) item {
