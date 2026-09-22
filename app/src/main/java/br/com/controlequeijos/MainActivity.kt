@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.20 — melhorias e segurança no backup
+// V7.21 — melhorias no gerenciamento de clientes e pedidos
 
 import android.content.Context
 import android.os.Bundle
@@ -282,6 +282,7 @@ fun ControleQueijosApp(context: Context) {
     var orderFilter by remember { mutableStateOf("Todas") }
     var orderSearch by remember { mutableStateOf("") }
     var clientSearch by remember { mutableStateOf("") }
+    var clientFilter by remember { mutableStateOf("Todos") }
     var backupMessage by remember { mutableStateOf("") }
     var deleteMessage by remember { mutableStateOf("") }
     var pendingDeleteTitle by remember { mutableStateOf("") }
@@ -383,10 +384,30 @@ fun ControleQueijosApp(context: Context) {
     val migratedOrders = orders.map { o -> if (o.customerId != 0L) o else clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(o.customerName) }?.let { o.copy(customerId = it.id) } ?: o }
     if (migratedOrders != orders) persistOrders(migratedOrders)
     val visibleClients = clients.filter { client ->
-        if (clientSearch.isBlank()) true
+        val clientOrders = orders.filter {
+            it.status != "Cancelada" &&
+                (it.customerId == client.id ||
+                    (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name)))
+        }
+        val balance = (clientOrders.sumOf { it.totalValue } - clientOrders.sumOf { it.paidValue }).coerceAtLeast(0.0)
+        val matchesFilter = when (clientFilter) {
+            "Com saldo" -> balance > 0.005
+            "Sem saldo" -> balance <= 0.005
+            else -> true
+        }
+        val matchesSearch = if (clientSearch.isBlank()) true
         else normalizeSearch(client.name).contains(searchText) ||
             (phoneSearch.isNotBlank() && normalizePhone(client.phone).contains(phoneSearch))
+        matchesFilter && matchesSearch
     }.sortedBy { normalizeSearch(it.name) }
+    val totalClientBalance = clients.sumOf { client ->
+        val clientOrders = orders.filter {
+            it.status != "Cancelada" &&
+                (it.customerId == client.id ||
+                    (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name)))
+        }
+        (clientOrders.sumOf { it.totalValue } - clientOrders.sumOf { it.paidValue }).coerceAtLeast(0.0)
+    }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
@@ -538,8 +559,15 @@ fun ControleQueijosApp(context: Context) {
 
                 item {
                     Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall)
+                    Text("Total a receber de clientes: R$ %.2f".format(totalClientBalance))
                     OutlinedTextField(clientSearch, { clientSearch = it }, label = { Text("Buscar cliente ou telefone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    if (clientSearch.isNotBlank()) Text("Exibindo: " + visibleClients.size + " cliente(s)")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("Todos", "Com saldo", "Sem saldo").forEach { f ->
+                            if (clientFilter == f) Button(onClick = { clientFilter = f }) { Text(f) }
+                            else OutlinedButton(onClick = { clientFilter = f }) { Text(f) }
+                        }
+                    }
+                    Text("Exibindo: " + visibleClients.size + " cliente(s)")
                 }
                 if (clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
                 items(visibleClients, key = { it.id }) { client ->
