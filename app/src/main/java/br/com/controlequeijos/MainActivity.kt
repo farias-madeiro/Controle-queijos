@@ -447,7 +447,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.29") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.30") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -473,6 +473,43 @@ fun ControleQueijosApp(context: Context) {
                     }
                     if (dueTodayOrders.isNotEmpty()) {
                         Text("📅 Há encomendas previstas para hoje.")
+                    }
+                }
+                item {
+                    Text("Agenda de entregas", style = MaterialTheme.typography.headlineSmall)
+                    val nextDeliveries = activeOrders
+                        .filter { it.status != "Entregue" }
+                        .filter { inNextSevenDays(it.deliveryDate) }
+                        .sortedBy { it.deliveryDate }
+                    if (nextDeliveries.isEmpty()) {
+                        Text("Nenhuma entrega prevista nos próximos 7 dias.")
+                    } else {
+                        nextDeliveries.take(12).forEach { order ->
+                            Text(
+                                dateOnly(order.deliveryDate) + " • " + order.customerName + " • " +
+                                    order.productName + " • " + order.quantity + " un. • " + order.status,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (nextDeliveries.size > 12) {
+                            Text("Mais " + (nextDeliveries.size - 12) + " entrega(s) na próxima semana.")
+                        }
+                    }
+                }
+                item {
+                    Text("Produção consolidada", style = MaterialTheme.typography.headlineSmall)
+                    val productionSummary = activeOrders
+                        .filter { it.status != "Entregue" }
+                        .groupBy { normalizeSearch(it.productName) }
+                        .values
+                        .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
+                        .sortedBy { normalizeSearch(it.first) }
+                    if (productionSummary.isEmpty()) {
+                        Text("Nenhum produto pendente de produção/entrega.")
+                    } else {
+                        productionSummary.forEach { (name, quantity) ->
+                            Text("• $name — $quantity un.")
+                        }
                     }
                 }
                 item {
