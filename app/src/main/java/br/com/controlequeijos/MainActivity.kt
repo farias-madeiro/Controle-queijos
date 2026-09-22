@@ -378,6 +378,7 @@ fun ControleQueijosApp(context: Context) {
 
     val filteredSales = sales.filter { inPeriod(it.date, period) }
     val filteredExpenses = expenses.filter { inPeriod(it.date, period) }
+    val filteredPayments = payments.filter { inPeriod(it.date, period) }
     val filteredOrders = orders.filter { inPeriod(it.orderDate, period) }
     val activeOrders = filteredOrders.filter { it.status != "Cancelada" }
     val deliveredOrders = activeOrders.filter { it.status == "Entregue" }
@@ -445,7 +446,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.24") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.27") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -492,7 +493,9 @@ fun ControleQueijosApp(context: Context) {
                     Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
                     Text("Gastos: R$ %.2f".format(expenseTotal))
                     Text("Lucro: R$ %.2f".format(profit))
-                    Text("Recebido: R$ %.2f".format(ordersPaid))
+                    Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
+                    Text("Recebimentos registrados no período: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
+                    Text("Quantidade de recebimentos: " + filteredPayments.size)
                     Text("A receber: R$ %.2f".format(ordersReceivable))
                     Text("Encomendas pendentes: " + pendingOrders.size)
                     Text("Em produção: " + productionOrders.size)
@@ -1024,10 +1027,14 @@ private fun buildFinancialReportText(
     appendLine("Margem: %.2f%%".format(margin))
     appendLine()
     appendLine("Encomendas no período: R$ %.2f".format(ordersTotal))
-    appendLine("Recebido: R$ %.2f".format(ordersPaid))
+    appendLine("Recebido de encomendas: R$ %.2f".format(ordersPaid))
+    appendLine("Recebimentos registrados: R$ %.2f".format(paymentsReceived))
+    appendLine("Quantidade de recebimentos: " + paymentCount)
+    val averagePayment = if (paymentCount > 0) paymentsReceived / paymentCount else 0.0
+    appendLine("Valor médio por recebimento: R$ %.2f".format(averagePayment))
     appendLine("A receber: R$ %.2f".format(receivable))
     val recebimento = if (ordersTotal > 0.005) (ordersPaid / ordersTotal * 100.0).coerceIn(0.0, 100.0) else 0.0
-    appendLine("Percentual recebido: %.2f%%".format(recebimento))
+    appendLine("Percentual recebido das encomendas: %.2f%%".format(recebimento))
     appendLine()
     appendLine("Encomendas pendentes: " + pending)
     appendLine("Em produção: " + production)
@@ -1050,14 +1057,17 @@ private fun buildOperationalReportText(period: String, orders: List<Order>): Str
         appendLine("CONTROLE QUEIJOS — RELATÓRIO OPERACIONAL")
         appendLine("Período: $period")
         appendLine()
+        val totalUnits = active.sumOf { it.quantity }
         appendLine("Encomendas: " + active.size)
+        appendLine("Produtos diferentes: " + productSummary.size)
+        appendLine("Unidades a produzir/entregar: " + totalUnits)
         appendLine("Pendentes: " + pending.size)
         appendLine("Em produção: " + production.size)
         appendLine("Entregues: " + delivered.size)
         appendLine("Atrasadas: " + overdue.size)
         appendLine("Para hoje: " + dueToday.size)
         appendLine()
-        appendLine("PRODUÇÃO POR PRODUTO")
+        appendLine("PRODUÇÃO CONSOLIDADA POR PRODUTO")
         if (productSummary.isEmpty()) appendLine("Nenhuma encomenda no período.")
         else productSummary.forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
     }
