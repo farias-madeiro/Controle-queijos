@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.24")
+        put("appVersion", "V7.29")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -447,7 +447,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.27") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.29") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -458,6 +458,8 @@ fun ControleQueijosApp(context: Context) {
                     DashboardCard("💰 Faturamento", "R$ %.2f".format(revenue))
                     DashboardCard("📈 Lucro líquido", "R$ %.2f".format(profit))
                     DashboardCard("💳 Total a receber", "R$ %.2f".format(ordersReceivable))
+                    DashboardCard("📥 Recebido no período", "R$ %.2f".format(filteredPayments.sumOf { it.amount }))
+                    DashboardCard("⚠️ Clientes com saldo", clientsWithBalance.toString())
                     DashboardCard("📋 Encomendas pendentes", pendingOrders.size.toString())
                     DashboardCard("🏭 Em produção", productionOrders.size.toString())
                     DashboardCard("💵 Valor das pendentes", "R$ %.2f".format(pendingOrdersValue))
@@ -465,7 +467,7 @@ fun ControleQueijosApp(context: Context) {
                     DashboardCard("⚠️ Entregas atrasadas", overdueOrders.size.toString())
                     DashboardCard("✅ Encomendas entregues", deliveredOrdersCount.toString())
                     DashboardCard("👥 Clientes", clients.size.toString())
-                    DashboardCard("💳 Clientes com saldo", clientsWithBalance.toString())
+                    
                     if (overdueOrders.isNotEmpty()) {
                         Text("⚠️ Há encomendas com entrega atrasada.", color = MaterialTheme.colorScheme.error)
                     }
@@ -475,6 +477,8 @@ fun ControleQueijosApp(context: Context) {
                 }
                 item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
+                    Text("Recebimentos registrados: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
+                    Text("Quantidade de recebimentos: " + filteredPayments.size)
                     Text("Vendas realizadas: R$ %.2f".format(saleRevenue))
                     Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
                     Text("Custo das mercadorias: R$ %.2f".format(cost))
@@ -605,6 +609,7 @@ fun ControleQueijosApp(context: Context) {
 
                 item {
                     Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall)
+                    Text("Total em aberto: R$ %.2f".format(totalClientBalance))
                     Text("Total a receber de clientes: R$ %.2f".format(totalClientBalance))
                     OutlinedTextField(clientSearch, { clientSearch = it }, label = { Text("Buscar cliente ou telefone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
