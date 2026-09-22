@@ -477,8 +477,11 @@ fun ControleQueijosApp(context: Context) {
                 }
                 item {
                     Text("Agenda de entregas", style = MaterialTheme.typography.headlineSmall)
+                    val overdueDeliveries = activeOrders
+                        .filter { it.status != "Entregue" && it.status != "Cancelada" && isOverdue(it.deliveryDate) }
+                        .sortedBy { it.deliveryDate }
                     val nextDeliveries = activeOrders
-                        .filter { it.status != "Entregue" }
+                        .filter { it.status != "Entregue" && it.status != "Cancelada" }
                         .filter { inNextSevenDays(it.deliveryDate) }
                         .sortedBy { it.deliveryDate }
 
@@ -488,6 +491,12 @@ fun ControleQueijosApp(context: Context) {
                         !sameDay(it.deliveryDate) && !sameDayOffset(it.deliveryDate, 1)
                     }
 
+                    if (overdueDeliveries.isNotEmpty()) {
+                        Text("⚠️ ATRASADAS — " + overdueDeliveries.size + " entrega(s)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
+                        overdueDeliveries.take(6).forEach { order ->
+                            Text("• " + dateOnly(order.deliveryDate) + " • " + order.customerName + " • " + order.productName + " • " + order.quantity + " un.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                     if (nextDeliveries.isEmpty()) {
                         Text("Nenhuma entrega prevista nos próximos 7 dias.")
                     } else {
@@ -529,7 +538,7 @@ fun ControleQueijosApp(context: Context) {
                 item {
                     Text("Produção consolidada", style = MaterialTheme.typography.headlineSmall)
                     val productionSummary = activeOrders
-                        .filter { it.status != "Entregue" }
+                        .filter { it.status != "Entregue" && it.status != "Cancelada" }
                         .groupBy { normalizeSearch(it.productName) }
                         .values
                         .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
