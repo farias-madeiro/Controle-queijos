@@ -630,23 +630,106 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
                 if (selectedTab == 4) item {
-                    Text("Produção consolidada", style = MaterialTheme.typography.headlineSmall)
-                    val productionOrders = activeOrders.filter { it.status != "Entregue" && it.status != "Cancelada" }
-                    val productionSummary = productionOrders
+                    Text("Produção", style = MaterialTheme.typography.headlineSmall)
+                    Text("Organize o que precisa ser produzido antes das entregas.", style = MaterialTheme.typography.bodySmall)
+
+                    val productionFilter = remember { mutableStateOf("Todos") }
+                    val productionOrdersAll = activeOrders.filter { it.status != "Entregue" && it.status != "Cancelada" }
+                    val pendingProduction = productionOrdersAll.filter { it.status == "Pendente" }
+                    val inProduction = productionOrdersAll.filter { it.status == "Em produção" }
+                    val filteredProductionOrders = when (productionFilter.value) {
+                        "A produzir" -> pendingProduction
+                        "Em produção" -> inProduction
+                        else -> productionOrdersAll
+                    }.sortedWith(compareBy<Order> { if (isOverdue(it.deliveryDate)) 0 else 1 }.thenBy { it.deliveryDate }.thenBy { normalizeSearch(it.customerName) })
+
+                    val productionSummary = productionOrdersAll
                         .groupBy { normalizeSearch(it.productName) }
                         .values
                         .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
                         .sortedBy { normalizeSearch(it.first) }
-                    val pendingUnits = productionOrders.filter { it.status == "Pendente" }.sumOf { it.quantity }
-                    val productionUnits = productionOrders.filter { it.status == "Em produção" }.sumOf { it.quantity }
-                    Text("A produzir: $pendingUnits un.")
-                    Text("Em produção: $productionUnits un.")
-                    Text("Total pendente de entrega: ${productionOrders.sumOf { it.quantity }} un.")
+
+                    val pendingUnits = pendingProduction.sumOf { it.quantity }
+                    val productionUnits = inProduction.sumOf { it.quantity }
+                    val totalUnits = productionOrdersAll.sumOf { it.quantity }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("Todos", "A produzir", "Em produção").forEach { filter ->
+                            if (productionFilter.value == filter) Button(onClick = { productionFilter.value = filter }) { Text(filter) }
+                            else OutlinedButton(onClick = { productionFilter.value = filter }) { Text(filter) }
+                        }
+                    }
+
+                    Text(
+                        "A produzir: $pendingUnits un. • Em produção: $productionUnits un. • Total: $totalUnits un.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    OutlinedButton(onClick = {
+                        val summary = buildString {
+                            appendLine("CONTROLE QUEIJOS — RESUMO DE PRODUÇÃO")
+                            appendLine("Período: $period")
+                            appendLine()
+                            appendLine("A produzir: $pendingUnits un.")
+                            appendLine("Em produção: $productionUnits un.")
+                            appendLine("Total pendente de entrega: $totalUnits un.")
+                            appendLine()
+                            productionSummary.forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
+                        }
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, summary)
+                        }, "Compartilhar resumo de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Compartilhar resumo de produção") }
+
+                    Text("Produção por produto", style = MaterialTheme.typography.titleMedium)
                     if (productionSummary.isEmpty()) {
                         Text("Nenhum produto pendente de produção/entrega.")
                     } else {
                         productionSummary.forEach { (name, quantity) ->
                             Text("• $name — $quantity un.")
+                        }
+                    }
+
+                    Text("Encomendas para produção", style = MaterialTheme.typography.titleMedium)
+                    if (filteredProductionOrders.isEmpty()) {
+                        Text(
+                            when (productionFilter.value) {
+                                "A produzir" -> "Nenhuma encomenda aguardando produção."
+                                "Em produção" -> "Nenhuma encomenda em produção."
+                                else -> "Nenhuma encomenda pendente de produção."
+                            }
+                        )
+                    } else {
+                        filteredProductionOrders.take(20).forEach { order ->
+                            val overdue = isOverdue(order.deliveryDate)
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        (if (overdue) "⚠️ " else "🧀 ") + order.productName + " — " + order.quantity + " un.",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text("Cliente: " + order.customerName)
+                                    Text("Entrega: " + dateOnly(order.deliveryDate))
+                                    Text("Status: " + order.status + if (overdue) " • ATRASADA" else "")
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (order.status == "Pendente") {
+                                            Button(onClick = {
+                                                persistOrders(orders.map { if (it.id == order.id) it.copy(status = "Em produção") else it })
+                                            }) { Text("Iniciar produção") }
+                                        }
+                                        if (order.status == "Em produção") {
+                                            Button(onClick = {
+                                                persistOrders(orders.map { if (it.id == order.id) it.copy(status = "Entregue") else it })
+                                            }) { Text("Concluir e entregar") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (filteredProductionOrders.size > 20) {
+                            Text("Mais " + (filteredProductionOrders.size - 20) + " encomenda(s) nesta lista.")
                         }
                     }
                 }
