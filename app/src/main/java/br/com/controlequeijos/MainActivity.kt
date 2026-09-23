@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.39")
+        put("appVersion", "V7.41")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -735,93 +735,39 @@ fun ControleQueijosApp(context: Context) {
                 }
                 if (selectedTab == 5) item {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
-                    Text("Recebimentos registrados: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
-                    Text("Quantidade de recebimentos: " + filteredPayments.size)
-                    Text("Vendas realizadas: R$ %.2f".format(saleRevenue))
-                    Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
-                    Text("Custo das mercadorias: R$ %.2f".format(cost))
+                    Text("Visão financeira detalhada no período selecionado.", style = MaterialTheme.typography.bodySmall)
+                    val receivedTotal = filteredPayments.sumOf { it.amount }
+                    val cashResult = receivedTotal - expenseTotal
+                    Text("Faturamento: R$ %.2f".format(saleRevenue + orderRevenue))
+                    Text("Recebido no período: R$ %.2f".format(receivedTotal))
+                    Text("A receber: R$ %.2f".format(ordersReceivable))
+                    Text("Lucro líquido: R$ %.2f".format(profit))
+                    Text("Resultado de caixa: R$ %.2f".format(cashResult))
                     Text("Gastos: R$ %.2f".format(expenseTotal))
-                    Text("Lucro: R$ %.2f".format(profit))
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
+                    Text("Recebimentos registrados: " + filteredPayments.size)
                     Text("Gastos lançados: " + filteredExpenses.size)
                     Text("Encomendas canceladas: " + filteredOrders.count { it.status == "Cancelada" })
-                    Spacer(Modifier.height(6.dp))
-                    Text("Encomendas no período: R$ %.2f".format(ordersTotal))
-                    Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
-                    Text("A receber: R$ %.2f".format(ordersReceivable))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Histórico de recebimentos", style = MaterialTheme.typography.titleMedium)
+                    if (filteredPayments.isEmpty()) Text("Nenhum recebimento no período.") else filteredPayments.sortedByDescending { it.date }.take(10).forEach { payment ->
+                        val order = orders.firstOrNull { it.id == payment.orderId }
+                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
+                            Text("R$ %.2f".format(payment.amount), style = MaterialTheme.typography.titleMedium)
+                            Text(dateText(payment.date) + if (payment.note.isNotBlank()) " • " + payment.note else "")
+                            if (order != null) Text("Cliente: " + order.customerName + " • " + order.productName)
+                        }}
+                    }
+                    Text("Histórico de gastos", style = MaterialTheme.typography.titleMedium)
+                    if (filteredExpenses.isEmpty()) Text("Nenhum gasto no período.") else filteredExpenses.sortedByDescending { it.date }.take(10).forEach { expense ->
+                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) {
+                            Text(expense.description, style = MaterialTheme.typography.titleMedium)
+                            Text("R$ %.2f • %s".format(expense.value, dateText(expense.date)))
+                        }}
+                    }
                 }
                 if (selectedTab == 5) item {
-                    Text("Relatórios", style = MaterialTheme.typography.headlineSmall)
-                    Text("Vendas: R$ %.2f".format(saleRevenue))
-                    Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
-                    Text("Gastos: R$ %.2f".format(expenseTotal))
-                    Text("Lucro: R$ %.2f".format(profit))
-                    Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
-                    Text("Recebimentos registrados no período: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
-                    Text("Quantidade de recebimentos: " + filteredPayments.size)
-                    Text("A receber: R$ %.2f".format(ordersReceivable))
-                    Text("Encomendas pendentes: " + pendingOrders.size)
-                    Text("Em produção: " + productionOrders.size)
-                    Text("Valor das encomendas pendentes: R$ %.2f".format(pendingOrdersValue))
-                    Text("Entregas atrasadas: " + overdueOrders.size)
-                    Text("Entregas previstas para hoje: " + dueTodayOrders.size)
-                    Text("Margem sobre vendas: %.2f%%".format(profitMargin))
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(onClick = {
-                            val report = buildReportText(period, activeOrders)
-                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, report)
-                            }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        }, modifier = Modifier.weight(1f)) { Text("Lista de produção") }
-                        OutlinedButton(onClick = {
-                            val report = buildFinancialReportText(
-                                period, saleRevenue, orderRevenue, cost, expenseTotal,
-                                profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
-                                pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size,
-                                filteredPayments.sumOf { it.amount }, filteredPayments.size
-                            )
-                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, report)
-                            }, "Compartilhar relatório financeiro").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        }, modifier = Modifier.weight(1f)) { Text("Relatório financeiro") }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = {
-                        val production = activeOrders.filter { it.status != "Entregue" && it.status != "Cancelada" }
-                        val pendingUnits = production.filter { it.status == "Pendente" }.sumOf { it.quantity }
-                        val productionUnits = production.filter { it.status == "Em produção" }.sumOf { it.quantity }
-                        val totalUnits = production.sumOf { it.quantity }
-                        val summary = buildString {
-                            appendLine("CONTROLE QUEIJOS — RESUMO DE PRODUÇÃO")
-                            appendLine("Período: $period")
-                            appendLine()
-                            appendLine("A produzir: $pendingUnits un.")
-                            appendLine("Em produção: $productionUnits un.")
-                            appendLine("Total pendente de entrega: $totalUnits un.")
-                            appendLine()
-                            production.groupBy { normalizeSearch(it.productName) }
-                                .values
-                                .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
-                                .sortedBy { normalizeSearch(it.first) }
-                                .forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
-                        }
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, summary)
-                        }, "Compartilhar resumo de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Resumo da produção") }
-                    OutlinedButton(onClick = {
-                        val report = buildOperationalReportText(period, activeOrders)
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, report)
-                        }, "Compartilhar relatório operacional").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Relatório operacional") }
-                }
-                if (selectedTab == 6) item {
+                    Text("Relatórios", style = MaterialTheme.typography.headlineSmall)if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
                     Text("O backup guarda clientes, encomendas, vendas e gastos em um arquivo JSON. O formato foi preparado para facilitar uma futura versão iOS.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
