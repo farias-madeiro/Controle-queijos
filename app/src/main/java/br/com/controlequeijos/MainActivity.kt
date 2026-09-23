@@ -5,6 +5,9 @@ package br.com.controlequeijos
 import android.content.Context
 import android.os.Bundle
 import android.content.Intent
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import java.io.OutputStream
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -211,7 +214,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.43")
+        put("appVersion", "V7.44")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -324,7 +327,22 @@ fun ControleQueijosApp(context: Context) {
     var restoreConfirmation by remember { mutableStateOf(false) }
     var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
     var selectedTab by remember { mutableStateOf(0) }
+    var pendingPdfText by remember { mutableStateOf("") }
     val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup")
+
+    val exportPdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null && pendingPdfText.isNotBlank()) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    writeSimplePdf(output, pendingPdfText)
+                } ?: error("Não foi possível criar o PDF.")
+            }.onFailure {
+                backupMessage = "Não foi possível gerar o PDF: ${it.message ?: "erro desconhecido"}"
+            }
+        }
+    }
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -463,7 +481,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.43") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.44") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -865,6 +883,27 @@ fun ControleQueijosApp(context: Context) {
                             putExtra(Intent.EXTRA_TEXT, report)
                         }, "Compartilhar relatório operacional").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }, modifier = Modifier.fillMaxWidth()) { Text("Relatório operacional") }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Exportar em PDF", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = {
+                            pendingPdfText = buildReportText(period, activeOrders)
+                            exportPdfLauncher.launch("controle-queijos-producao.pdf")
+                        }, modifier = Modifier.weight(1f)) { Text("PDF produção") }
+                        OutlinedButton(onClick = {
+                            pendingPdfText = buildFinancialReportText(
+                                period, saleRevenue, orderRevenue, cost, expenseTotal,
+                                profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
+                                pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size,
+                                filteredPayments.sumOf { it.amount }, filteredPayments.size
+                            )
+                            exportPdfLauncher.launch("controle-queijos-financeiro.pdf")
+                        }, modifier = Modifier.weight(1f)) { Text("PDF financeiro") }
+                    }
+                    OutlinedButton(onClick = {
+                        pendingPdfText = buildOperationalReportText(period, activeOrders)
+                        exportPdfLauncher.launch("controle-queijos-operacional.pdf")
+                    }, modifier = Modifier.fillMaxWidth()) { Text("PDF operacional") }
                 }
                 if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
@@ -1422,6 +1461,39 @@ private fun buildClientMessage(client: Client, orders: List<Order>, total: Doubl
             appendLine(dateOnly(it.orderDate) + " — " + it.productName + " (" + it.quantity + " un.) — R$ %.2f".format(it.totalValue))
         }
     }
+}
+
+private fun writeSimplePdf(output: OutputStream, text: String) {
+    val document = PdfDocument()
+    val pageWidth = 595
+    val pageHeight = 842
+    val left = 40f
+    val top = 52f
+    val lineHeight = 18f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        textSize = 12f
+    }
+    val lines = text.lines().flatMap { line ->
+        if (line.length <= 78) listOf(line) else line.chunked(78)
+    }
+    var pageNumber = 1
+    var index = 0
+    while (index < lines.size || (lines.isEmpty() && pageNumber == 1)) {
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        val page = document.startPage(pageInfo)
+        var y = top
+        while (index < lines.size && y <= pageHeight - 45f) {
+            page.canvas.drawText(lines[index], left, y, paint)
+            y += lineHeight
+            index++
+        }
+        document.finishPage(page)
+        pageNumber++
+        if (lines.isEmpty()) break
+    }
+    document.writeTo(output)
+    document.close()
 }
 
 private fun buildFinancialReportText(
