@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.42")
+        put("appVersion", "V7.43")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -463,7 +463,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.42") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.43") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -548,6 +548,60 @@ fun ControleQueijosApp(context: Context) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = { selectedTab = 5 }, modifier = Modifier.weight(1f)) { Text("💰 Financeiro") }
                         OutlinedButton(onClick = { selectedTab = 3 }, modifier = Modifier.weight(1f)) { Text("🚚 Entregas") }
+                    }
+
+                    Text("📊 Gráficos", style = MaterialTheme.typography.titleMedium)
+                    val financialChartValues = listOf(
+                        "Faturamento" to revenue.coerceAtLeast(0.0),
+                        "Recebido" to filteredPayments.sumOf { it.amount }.coerceAtLeast(0.0),
+                        "Gastos" to expenseTotal.coerceAtLeast(0.0),
+                        "A receber" to ordersReceivable.coerceAtLeast(0.0)
+                    )
+                    val financialChartMax = financialChartValues.maxOfOrNull { it.second } ?: 0.0
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("💰 Visão financeira", style = MaterialTheme.typography.titleMedium)
+                            financialChartValues.forEach { (label, value) ->
+                                DashboardBar(label, "R$ %.2f".format(value), value, financialChartMax)
+                            }
+                        }
+                    }
+
+                    val statusChartValues = listOf(
+                        "Pendentes" to pendingOrders.size,
+                        "Em produção" to productionOrders.size,
+                        "Entregues" to deliveredOrdersCount,
+                        "Atrasadas" to overdueOrders.size
+                    )
+                    val statusChartMax = statusChartValues.maxOfOrNull { it.second } ?: 0
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("📦 Encomendas por status", style = MaterialTheme.typography.titleMedium)
+                            statusChartValues.forEach { (label, value) ->
+                                DashboardBar(label, value.toString(), value.toDouble(), statusChartMax.toDouble())
+                            }
+                        }
+                    }
+
+                    val productionChartValues = activeOrders
+                        .filter { it.status != "Entregue" }
+                        .groupBy { normalizeSearch(it.productName) }
+                        .values
+                        .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
+                        .sortedByDescending { it.second }
+                        .take(6)
+                    val productionChartMax = productionChartValues.maxOfOrNull { it.second } ?: 0
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("🧀 Produção por produto", style = MaterialTheme.typography.titleMedium)
+                            if (productionChartValues.isEmpty()) {
+                                Text("Nenhuma produção pendente.")
+                            } else {
+                                productionChartValues.forEach { (label, value) ->
+                                    DashboardBar(label, "$value un.", value.toDouble(), productionChartMax.toDouble())
+                                }
+                            }
+                        }
                     }
                 }
                 if (selectedTab == 3) item {
@@ -1283,6 +1337,18 @@ if (selectedTab == 2) item {
     }
 }
 
+}
+
+@Composable
+private fun DashboardBar(label: String, valueText: String, value: Double, maxValue: Double) {
+    val progress = if (maxValue > 0.0) (value / maxValue).coerceIn(0.0, 1.0).toFloat() else 0f
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodySmall)
+            Text(valueText, style = MaterialTheme.typography.labelLarge)
+        }
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 @Composable
