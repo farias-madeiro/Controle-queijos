@@ -211,7 +211,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.41")
+        put("appVersion", "V7.42")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -463,7 +463,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.39") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.42") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -882,8 +882,28 @@ fun ControleQueijosApp(context: Context) {
 
                 if (selectedTab == 1) item {
                     Text("Clientes (" + clients.size + ")", style = MaterialTheme.typography.headlineSmall)
-                    Text("Total a receber de clientes: R$ %.2f".format(totalClientBalance))
-                    OutlinedTextField(clientSearch, { clientSearch = it }, label = { Text("Buscar cliente ou telefone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("Total a receber: R$ %.2f".format(totalClientBalance))
+                    val clientsWithOpenBalance = clients.count { client ->
+                        val clientOrders = orders.filter {
+                            it.status != "Cancelada" &&
+                                (it.customerId == client.id ||
+                                    (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name)))
+                        }
+                        val total = clientOrders.sumOf { it.totalValue }
+                        val received = clientOrders.sumOf { order ->
+                            val linked = payments.filter { it.orderId == order.id }.sumOf { it.amount }
+                            if (linked > 0.005) linked else order.paidValue
+                        }
+                        (total - received) > 0.005
+                    }
+                    Text("Clientes com saldo: " + clientsWithOpenBalance)
+                    OutlinedTextField(
+                        clientSearch,
+                        { clientSearch = it },
+                        label = { Text("Buscar cliente ou telefone") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("Todos", "Com saldo", "Sem saldo").forEach { f ->
                             if (clientFilter == f) Button(onClick = { clientFilter = f }) { Text(f) }
@@ -891,40 +911,58 @@ fun ControleQueijosApp(context: Context) {
                         }
                     }
                     Text("Exibindo: " + visibleClients.size + " cliente(s)")
+                    if (clients.isNotEmpty()) {
+                        Text("Resumo dos clientes", style = MaterialTheme.typography.titleMedium)
+                        Text("Com saldo: " + clientsWithOpenBalance + " • Sem saldo: " + (clients.size - clientsWithOpenBalance))
+                    }
                 }
-                if (selectedTab == 1 && clients.isEmpty()) item { Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.") }
+                if (selectedTab == 1 && clients.isEmpty()) item {
+                    Text(if (clientSearch.isBlank()) "Nenhum cliente cadastrado." else "Nenhum cliente encontrado.")
+                }
                 if (selectedTab == 1) items(visibleClients, key = { it.id }) { client ->
-                    val clientOrders = orders.filter { it.status != "Cancelada" && (it.customerId == client.id || (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name))) }.sortedByDescending { it.orderDate }
+                    val allClientOrders = orders.filter {
+                        it.customerId == client.id ||
+                            (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name))
+                    }.sortedByDescending { it.orderDate }
+                    val clientOrders = allClientOrders.filter { it.status != "Cancelada" }
                     val total = clientOrders.sumOf { it.totalValue }
-                    val paid = clientOrders.sumOf { it.paidValue }
+                    val registeredReceived = clientOrders.sumOf { order ->
+                        payments.filter { it.orderId == order.id }.sumOf { it.amount }
+                    }
+                    val legacyPaid = clientOrders.sumOf { it.paidValue }
+                    val received = if (registeredReceived > 0.005) registeredReceived else legacyPaid
+                    val balance = (total - received).coerceAtLeast(0.0)
+                    val lastOrder = allClientOrders.firstOrNull()
+                    val pendingOrders = clientOrders.count { it.status == "Pendente" || it.status == "Em produção" }
+                    val clientPaymentHistory = payments.filter { p -> clientOrders.any { it.id == p.orderId } }.sortedByDescending { it.date }
+
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(client.name, style = MaterialTheme.typography.titleMedium)
                             if (client.phone.isNotBlank()) Text("Telefone: " + client.phone)
-                            Text("Compras/encomendas: " + clientOrders.size)
-                            Text("Total: R$ %.2f | Recebido: R$ %.2f".format(total, paid))
-                            Text("Saldo: R$ %.2f".format((total - paid).coerceAtLeast(0.0)))
-                            val clientPayments = payments.filter { p -> clientOrders.any { it.id == p.orderId } }.sortedByDescending { it.date }
-                            if (clientPayments.isNotEmpty()) {
-                                Text("Recebimentos", style = MaterialTheme.typography.labelLarge)
-                                clientPayments.take(10).forEach { p -> Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "", style = MaterialTheme.typography.bodySmall) }
-                            }
-                            if (clientOrders.isNotEmpty()) {
-                                Text("Histórico de encomendas", style = MaterialTheme.typography.labelLarge)
-                                clientOrders.forEach { order ->
-                                    Text(
-                                        dateOnly(order.orderDate) + " • " + order.productName + " • " +
-                                            order.quantity + " un. • R$ %.2f • ".format(order.totalValue) + order.status,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
+                            Text("Total comprado: R$ %.2f".format(total))
+                            Text("Recebido: R$ %.2f".format(received))
+                            Text("Saldo em aberto: R$ %.2f".format(balance), color = if (balance > 0.005) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                            Text("Encomendas: " + clientOrders.size + " • Pendentes: " + pendingOrders)
+                            if (lastOrder != null) Text("Última encomenda: " + dateOnly(lastOrder.orderDate) + " • " + lastOrder.productName + " • " + lastOrder.quantity + " un.")
+                            if (clientPaymentHistory.isNotEmpty()) {
+                                Text("Últimos recebimentos", style = MaterialTheme.typography.labelLarge)
+                                clientPaymentHistory.take(5).forEach { p ->
+                                    Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "", style = MaterialTheme.typography.bodySmall)
                                 }
+                            }
+                            if (allClientOrders.isNotEmpty()) {
+                                Text("Histórico de encomendas", style = MaterialTheme.typography.labelLarge)
+                                allClientOrders.take(10).forEach { order ->
+                                    Text(dateOnly(order.orderDate) + " • " + order.productName + " • " + order.quantity + " un. • R$ %.2f • ".format(order.totalValue) + order.status, style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (allClientOrders.size > 10) Text("Mais " + (allClientOrders.size - 10) + " encomenda(s) no histórico.", style = MaterialTheme.typography.bodySmall)
                             }
                             if (client.notes.isNotBlank()) Text("Obs.: " + client.notes)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 OutlinedButton(onClick = { editingClient = client; clientDialog = true }) { Text("Editar") }
                                 OutlinedButton(onClick = { statementClient = client }) { Text("Extrato") }
                                 OutlinedButton(onClick = {
-                                    val clientPaymentHistory = payments.filter { p -> clientOrders.any { it.id == p.orderId } }.sortedByDescending { it.date }
                                     val message = buildClientStatementMessage(client, clientOrders, clientPaymentHistory)
                                     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
@@ -934,11 +972,11 @@ fun ControleQueijosApp(context: Context) {
                             }
                             OutlinedButton(
                                 onClick = {
-                                    if (clientOrders.isEmpty()) {
+                                    if (allClientOrders.isEmpty()) {
                                         pendingDeleteTitle = "Excluir cliente?"
                                         pendingDeleteAction = { persistClients(clients.filterNot { it.id == client.id }) }
                                     } else {
-                                        deleteMessage = "Este cliente possui encomendas ativas. Exclua ou cancele essas encomendas antes de excluir o cadastro do cliente."
+                                        deleteMessage = "Este cliente possui histórico de encomendas. Exclua ou cancele as encomendas antes de excluir o cadastro do cliente."
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -946,7 +984,6 @@ fun ControleQueijosApp(context: Context) {
                         }
                     }
                 }
-
 if (selectedTab == 2) item {
                     Text("Encomendas", style = MaterialTheme.typography.headlineSmall)
                     OutlinedTextField(
