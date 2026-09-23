@@ -767,7 +767,52 @@ fun ControleQueijosApp(context: Context) {
                     }
                 }
                 if (selectedTab == 5) item {
-                    Text("Relatórios", style = MaterialTheme.typography.headlineSmall)if (selectedTab == 6) item {
+                    Text("Relatórios", style = MaterialTheme.typography.headlineSmall)
+                    Text("Vendas: R$ %.2f".format(saleRevenue))
+                    Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
+                    Text("Gastos: R$ %.2f".format(expenseTotal))
+                    Text("Lucro: R$ %.2f".format(profit))
+                    Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
+                    Text("Recebimentos registrados no período: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
+                    Text("Quantidade de recebimentos: " + filteredPayments.size)
+                    Text("A receber: R$ %.2f".format(ordersReceivable))
+                    Text("Encomendas pendentes: " + pendingOrders.size)
+                    Text("Em produção: " + productionOrders.size)
+                    Text("Valor das encomendas pendentes: R$ %.2f".format(pendingOrdersValue))
+                    Text("Entregas atrasadas: " + overdueOrders.size)
+                    Text("Entregas previstas para hoje: " + dueTodayOrders.size)
+                    Text("Margem sobre vendas: %.2f%%".format(profitMargin))
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = {
+                            val report = buildReportText(period, activeOrders)
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }, "Compartilhar lista de produção").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }, modifier = Modifier.weight(1f)) { Text("Lista de produção") }
+                        OutlinedButton(onClick = {
+                            val report = buildFinancialReportText(
+                                period, saleRevenue, orderRevenue, cost, expenseTotal,
+                                profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
+                                pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size,
+                                filteredPayments.sumOf { it.amount }, filteredPayments.size
+                            )
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }, "Compartilhar relatório financeiro").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }, modifier = Modifier.weight(1f)) { Text("Relatório financeiro") }
+                    }
+                    OutlinedButton(onClick = {
+                        val report = buildOperationalReportText(period, activeOrders)
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }, "Compartilhar relatório operacional").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Relatório operacional") }
+                }
+                if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
                     Text("O backup guarda clientes, encomendas, vendas e gastos em um arquivo JSON. O formato foi preparado para facilitar uma futura versão iOS.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
