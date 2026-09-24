@@ -214,7 +214,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.44")
+        put("appVersion", "V7.45")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -328,7 +328,22 @@ fun ControleQueijosApp(context: Context) {
     var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
     var selectedTab by remember { mutableStateOf(0) }
     var pendingPdfText by remember { mutableStateOf("") }
+    var pendingCsvText by remember { mutableStateOf("") }
     val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup")
+
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null && pendingCsvText.isNotBlank()) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(pendingCsvText.toByteArray(Charsets.UTF_8))
+                } ?: error("Não foi possível criar o arquivo CSV.")
+            }.onFailure {
+                backupMessage = "Não foi possível gerar o arquivo: ${it.message ?: "erro desconhecido"}"
+            }
+        }
+    }
 
     val exportPdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -481,7 +496,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.44") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.45") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -904,6 +919,23 @@ fun ControleQueijosApp(context: Context) {
                         pendingPdfText = buildOperationalReportText(period, activeOrders)
                         exportPdfLauncher.launch("controle-queijos-operacional.pdf")
                     }, modifier = Modifier.fillMaxWidth()) { Text("PDF operacional") }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Exportar para Excel", style = MaterialTheme.typography.titleMedium)
+                    Text("Arquivos CSV abrem normalmente no Excel, Google Planilhas e outros aplicativos de planilha.", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = {
+                            pendingCsvText = buildOrdersCsv(period, activeOrders)
+                            exportCsvLauncher.launch("controle-queijos-encomendas.csv")
+                        }, modifier = Modifier.weight(1f)) { Text("Encomendas") }
+                        OutlinedButton(onClick = {
+                            pendingCsvText = buildFinancialCsv(period, activeOrders, filteredPayments, expenses)
+                            exportCsvLauncher.launch("controle-queijos-financeiro.csv")
+                        }, modifier = Modifier.weight(1f)) { Text("Financeiro") }
+                    }
+                    OutlinedButton(onClick = {
+                        pendingCsvText = buildProductionCsv(period, activeOrders)
+                        exportCsvLauncher.launch("controle-queijos-producao.csv")
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Produção consolidada") }
                 }
                 if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
@@ -1460,6 +1492,51 @@ private fun buildClientMessage(client: Client, orders: List<Order>, total: Doubl
         orders.sortedByDescending { it.orderDate }.take(10).forEach {
             appendLine(dateOnly(it.orderDate) + " — " + it.productName + " (" + it.quantity + " un.) — R$ %.2f".format(it.totalValue))
         }
+    }
+}
+
+private fun csvCell(value: String): String = "\"" + value.replace("\"", "\"\"").replace("\n", " ").replace("\r", " ") + "\""
+
+private fun buildOrdersCsv(period: String, orders: List<Order>): String = buildString {
+    appendLine("CONTROLE QUEIJOS — ENCOMENDAS")
+    appendLine("Período;${csvCell(period)}")
+    appendLine()
+    appendLine("Data;Cliente;Produto;Quantidade;Valor total;Pago;Saldo;Status;Entrega")
+    orders.sortedByDescending { it.orderDate }.forEach { order ->
+        val paid = paymentsForOrder(order.id)
+        val received = if (paid > 0.005) paid else order.paidValue
+        appendLine(listOf(dateOnly(order.orderDate), order.customerName, order.productName, order.quantity.toString(), "%.2f".format(order.totalValue), "%.2f".format(received), "%.2f".format((order.totalValue - received).coerceAtLeast(0.0)), order.status, dateOnly(order.deliveryDate)).joinToString(";") { csvCell(it) })
+    }
+}
+
+private fun buildFinancialCsv(period: String, orders: List<Order>, payments: List<Payment>, expenses: List<Expense>): String = buildString {
+    appendLine("CONTROLE QUEIJOS — FINANCEIRO")
+    appendLine("Período;${csvCell(period)}")
+    appendLine()
+    appendLine("TIPO;Data;Descrição;Cliente;Valor;Observação")
+    orders.sortedByDescending { it.orderDate }.forEach { order ->
+        appendLine(listOf("Encomenda", dateOnly(order.orderDate), order.productName, order.customerName, "%.2f".format(order.totalValue), order.status).joinToString(";") { csvCell(it) })
+    }
+    payments.sortedByDescending { it.date }.forEach { p ->
+        val order = orders.firstOrNull { it.id == p.orderId }
+        appendLine(listOf("Recebimento", dateText(p.date), "Recebimento", order?.customerName ?: "", "%.2f".format(p.amount), p.note).joinToString(";") { csvCell(it) })
+    }
+    expenses.sortedByDescending { it.date }.forEach { e ->
+        appendLine(listOf("Gasto", dateText(e.date), e.description, "", "%.2f".format(e.amount), "").joinToString(";") { csvCell(it) })
+    }
+}
+
+private fun buildProductionCsv(period: String, orders: List<Order>): String {
+    val active = orders.filter { it.status != "Entregue" && it.status != "Cancelada" }
+    val summary = active.groupBy { normalizeSearch(it.productName) }.values
+        .map { it.first().productName.trim() to it.sumOf { order -> order.quantity } }
+        .sortedBy { normalizeSearch(it.first) }
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — PRODUÇÃO CONSOLIDADA")
+        appendLine("Período;${csvCell(period)}")
+        appendLine()
+        appendLine("Produto;Quantidade")
+        summary.forEach { (name, quantity) -> appendLine("${csvCell(name)};$quantity") }
     }
 }
 
