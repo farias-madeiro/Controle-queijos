@@ -61,6 +61,8 @@ private const val CLIENTS = "clients"
 private const val PRE_RESTORE_BACKUP = "pre_restore_backup"
 private const val AUTO_BACKUP_FILE = "controle_queijos_auto_backup.json"
 private const val PIN_HASH = "pin_hash"
+private const val USER_NAME = "user_name"
+private const val USER_ROLE = "user_role"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -223,7 +225,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.48")
+        put("appVersion", "V7.49")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -360,9 +362,38 @@ fun ControleQueijosApp(context: Context) {
     var pinDialog by remember { mutableStateOf(true) }
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
+    var userName by remember { mutableStateOf(prefs.getString(USER_NAME, "Administrador") ?: "Administrador") }
+    var userRole by remember { mutableStateOf(prefs.getString(USER_ROLE, "Administrador") ?: "Administrador") }
+    var userDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(products, sales, expenses, orders, clients, payments) {
         writeAutomaticBackup(context).onSuccess { autoBackupAt = it }
+    }
+
+    if (userDialog) {
+        AlertDialog(
+            onDismissRequest = { userDialog = false },
+            title = { Text("👤 Usuário e permissões") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Defina o nome deste usuário e o nível de acesso do aparelho.")
+                    OutlinedTextField(value = userName, onValueChange = { userName = it }, label = { Text("Nome") }, singleLine = true)
+                    Text("Perfil: $userRole")
+                    Text("Administrador: acesso completo. Operador: acesso às rotinas do dia a dia, sem configurações de segurança.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val clean = userName.trim()
+                    if (clean.isNotBlank()) {
+                        userName = clean
+                        prefs.edit().putString(USER_NAME, clean).putString(USER_ROLE, userRole).apply()
+                        userDialog = false
+                    }
+                }) { Text("Salvar") }
+            },
+            dismissButton = { TextButton(onClick = { userDialog = false }) { Text("Cancelar") } }
+        )
     }
 
     if (pinDialog) {
@@ -569,7 +600,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.48") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.49") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1026,6 +1057,7 @@ fun ControleQueijosApp(context: Context) {
     }
 
     if (selectedTab == 6) item {
+            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("👤 Usuário deste aparelho", style = MaterialTheme.typography.titleMedium); Text("$userName • $userRole"); OutlinedButton(onClick = { userDialog = true }) { Text("Gerenciar usuário") } } }
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
                     Text("Backup automático e manual para proteger os dados do Controle Queijos.")
                     Card(Modifier.fillMaxWidth()) {
