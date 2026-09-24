@@ -26,6 +26,7 @@ import java.text.Normalizer
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.security.MessageDigest
 
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
 data class Sale(val id: Long, val productId: Long, val productName: String, val quantity: Int, val unitValue: Double, val unitCost: Double, val date: Long)
@@ -59,12 +60,19 @@ private const val ORDERS = "orders"
 private const val CLIENTS = "clients"
 private const val PRE_RESTORE_BACKUP = "pre_restore_backup"
 private const val AUTO_BACKUP_FILE = "controle_queijos_auto_backup.json"
+private const val PIN_HASH = "pin_hash"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { ControleQueijosApp(applicationContext) }
     }
+}
+
+private fun hashPin(pin: String): String {
+    return MessageDigest.getInstance("SHA-256")
+        .digest(pin.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 }
 
 private fun loadProducts(context: Context): List<Product> = runCatching {
@@ -215,7 +223,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.47")
+        put("appVersion", "V7.48")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -346,12 +354,57 @@ fun ControleQueijosApp(context: Context) {
     var pendingPdfText by remember { mutableStateOf("") }
     var pendingCsvText by remember { mutableStateOf("") }
     val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização")
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    var hasPin by remember { mutableStateOf(prefs.getString(PIN_HASH, null).orEmpty().isNotBlank()) }
+    var isUnlocked by remember { mutableStateOf(!hasPin) }
+    var pinDialog by remember { mutableStateOf(true) }
+    var pinInput by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf("") }
 
     LaunchedEffect(products, sales, expenses, orders, clients, payments) {
         writeAutomaticBackup(context).onSuccess { autoBackupAt = it }
     }
 
-    val exportCsvLauncher = rememberLauncherForActivityResult(
+    if (pinDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!hasPin) { } },
+            title = { Text(if (hasPin && !isUnlocked) "🔐 Controle Queijos bloqueado" else "🔐 Proteger aplicativo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (hasPin && !isUnlocked) "Digite o PIN para acessar o aplicativo." else "Crie um PIN de 4 a 8 dígitos para proteger o acesso.")
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) { pinInput = it; pinError = "" } },
+                        label = { Text("PIN") },
+                        singleLine = true
+                    )
+                    if (pinError.isNotBlank()) Text(pinError, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (!hasPin) {
+                        if (pinInput.length in 4..8) {
+                            prefs.edit().putString(PIN_HASH, hashPin(pinInput)).apply()
+                            hasPin = true
+                            isUnlocked = true
+                            pinDialog = false
+                            pinInput = ""
+                        } else pinError = "O PIN deve ter entre 4 e 8 dígitos."
+                    } else if (hashPin(pinInput) == prefs.getString(PIN_HASH, "")) {
+                        isUnlocked = true
+                        pinDialog = false
+                        pinInput = ""
+                    } else {
+                        pinError = "PIN incorreto."
+                        pinInput = ""
+                    }
+                }) { Text(if (hasPin) "Entrar" else "Criar PIN") }
+            }
+        )
+    }
+
+        val exportCsvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri ->
         if (uri != null && pendingCsvText.isNotBlank()) {
@@ -516,7 +569,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.47") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.48") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
