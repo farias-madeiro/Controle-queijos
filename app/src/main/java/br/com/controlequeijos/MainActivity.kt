@@ -58,6 +58,7 @@ private const val PAYMENTS = "payments"
 private const val ORDERS = "orders"
 private const val CLIENTS = "clients"
 private const val PRE_RESTORE_BACKUP = "pre_restore_backup"
+private const val AUTO_BACKUP_FILE = "controle_queijos_auto_backup.json"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -214,7 +215,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.46")
+        put("appVersion", "V7.47")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -233,6 +234,20 @@ private fun buildBackupJson(context: Context): String {
             })
         })
     }.toString(2)
+}
+
+private fun writeAutomaticBackup(context: Context): Result<Long> = runCatching {
+    val file = context.getFileStreamPath(AUTO_BACKUP_FILE)
+    context.openFileOutput(AUTO_BACKUP_FILE, Context.MODE_PRIVATE).use { output ->
+        output.write(buildBackupJson(context).toByteArray(Charsets.UTF_8))
+    }
+    file.lastModified()
+}
+
+private fun readAutomaticBackup(context: Context): Result<String> = runCatching {
+    val file = context.getFileStreamPath(AUTO_BACKUP_FILE)
+    require(file.exists() && file.length() > 0) { "Ainda não existe um backup automático." }
+    file.readText(Charsets.UTF_8)
 }
 
 private fun restoreBackupJson(context: Context, text: String): Result<Unit> = runCatching {
@@ -326,11 +341,15 @@ fun ControleQueijosApp(context: Context) {
     var pendingRestoreText by remember { mutableStateOf<String?>(null) }
     var restoreConfirmation by remember { mutableStateOf(false) }
     var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
+    var autoBackupAt by remember { mutableStateOf(context.getFileStreamPath(AUTO_BACKUP_FILE).lastModified()) }
     var selectedTab by remember { mutableStateOf(0) }
     var pendingPdfText by remember { mutableStateOf("") }
-    var pendingSyncText by remember { mutableStateOf("") }
     var pendingCsvText by remember { mutableStateOf("") }
     val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização")
+
+    LaunchedEffect(products, sales, expenses, orders, clients, payments) {
+        writeAutomaticBackup(context).onSuccess { autoBackupAt = it }
+    }
 
     val exportCsvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
@@ -497,7 +516,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.46") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.47") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -955,7 +974,28 @@ fun ControleQueijosApp(context: Context) {
 
     if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
-                    Text("O backup guarda clientes, encomendas, vendas e gastos em um arquivo JSON. O formato foi preparado para facilitar uma futura versão iOS.")
+                    Text("Backup automático e manual para proteger os dados do Controle Queijos.")
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("🛡️ Backup automático", style = MaterialTheme.typography.titleMedium)
+                            if (autoBackupAt > 0L) {
+                                Text("Último backup automático: " + dateText(autoBackupAt))
+                            } else {
+                                Text("O primeiro backup automático será criado assim que os dados forem carregados.")
+                            }
+                            Text("O backup automático é atualizado quando os dados do aplicativo são alterados.")
+                            OutlinedButton(onClick = {
+                                readAutomaticBackup(context).onSuccess { text ->
+                                    pendingRestoreText = text
+                                    restoreConfirmation = true
+                                }.onFailure {
+                                    backupMessage = it.message ?: "Backup automático indisponível."
+                                }
+                            }) { Text("Restaurar backup automático") }
+                        }
+                    }
+                    Text("Backup manual", style = MaterialTheme.typography.titleMedium)
+                    Text("O backup manual gera um arquivo JSON que pode ser guardado em outro local ou enviado para outro celular. O backup guarda clientes, encomendas, vendas e gastos.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { exportBackupLauncher.launch("controle-queijos-backup.json") }) {
                             Text("Fazer backup")
