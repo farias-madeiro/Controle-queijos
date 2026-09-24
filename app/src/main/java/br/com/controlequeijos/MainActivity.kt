@@ -924,7 +924,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Arquivos CSV abrem normalmente no Excel, Google Planilhas e outros aplicativos de planilha.", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = {
-                            pendingCsvText = buildOrdersCsv(period, activeOrders)
+                            pendingCsvText = buildOrdersCsv(period, activeOrders, filteredPayments)
                             exportCsvLauncher.launch("controle-queijos-encomendas.csv")
                         }, modifier = Modifier.weight(1f)) { Text("Encomendas") }
                         OutlinedButton(onClick = {
@@ -1497,13 +1497,13 @@ private fun buildClientMessage(client: Client, orders: List<Order>, total: Doubl
 
 private fun csvCell(value: String): String = "\"" + value.replace("\"", "\"\"").replace("\n", " ").replace("\r", " ") + "\""
 
-private fun buildOrdersCsv(period: String, orders: List<Order>): String = buildString {
+private fun buildOrdersCsv(period: String, orders: List<Order>, payments: List<Payment>): String = buildString {
     appendLine("CONTROLE QUEIJOS — ENCOMENDAS")
     appendLine("Período;${csvCell(period)}")
     appendLine()
     appendLine("Data;Cliente;Produto;Quantidade;Valor total;Pago;Saldo;Status;Entrega")
     orders.sortedByDescending { it.orderDate }.forEach { order ->
-        val paid = paymentsForOrder(order.id)
+        val paid = payments.filter { it.orderId == order.id }.sumOf { it.amount }
         val received = if (paid > 0.005) paid else order.paidValue
         appendLine(listOf(dateOnly(order.orderDate), order.customerName, order.productName, order.quantity.toString(), "%.2f".format(order.totalValue), "%.2f".format(received), "%.2f".format((order.totalValue - received).coerceAtLeast(0.0)), order.status, dateOnly(order.deliveryDate)).joinToString(";") { csvCell(it) })
     }
