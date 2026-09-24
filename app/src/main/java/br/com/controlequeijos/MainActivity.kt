@@ -214,7 +214,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.45")
+        put("appVersion", "V7.46")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -328,8 +328,9 @@ fun ControleQueijosApp(context: Context) {
     var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
     var selectedTab by remember { mutableStateOf(0) }
     var pendingPdfText by remember { mutableStateOf("") }
+    var pendingSyncText by remember { mutableStateOf("") }
     var pendingCsvText by remember { mutableStateOf("") }
-    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup")
+    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização")
 
     val exportCsvLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
@@ -496,7 +497,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.45") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.46") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -937,7 +938,22 @@ fun ControleQueijosApp(context: Context) {
                         exportCsvLauncher.launch("controle-queijos-producao.csv")
                     }, modifier = Modifier.fillMaxWidth()) { Text("Produção consolidada") }
                 }
-                if (selectedTab == 6) item {
+                if (selectedTab == 7) item {
+        Text("Sincronização", style = MaterialTheme.typography.headlineSmall)
+        Text("Use o mesmo arquivo de sincronização nos seus celulares para manter os dados iguais.", style = MaterialTheme.typography.bodySmall)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("🔄 Sincronização manual", style = MaterialTheme.typography.titleMedium)
+                Text("Nesta primeira etapa, a sincronização funciona por arquivo: exporte os dados de um celular e importe no outro. O backup atual continua disponível como segurança.")
+                Text("Dados incluídos: clientes, encomendas, produtos, recebimentos, vendas e gastos.")
+                Button(onClick = { exportBackupLauncher.launch("Controle-Queijos-Sincronizacao.json") }, modifier = Modifier.fillMaxWidth()) { Text("Exportar dados para outro celular") }
+                OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Importar dados de outro celular") }
+                Text("⚠️ A importação substitui os dados atuais pelos dados do arquivo. Faça um backup antes de importar.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
+    if (selectedTab == 6) item {
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
                     Text("O backup guarda clientes, encomendas, vendas e gastos em um arquivo JSON. O formato foi preparado para facilitar uma futura versão iOS.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
