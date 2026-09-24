@@ -10,8 +10,8 @@ android {
         applicationId = "br.com.controlequeijos"
         minSdk = 24
         targetSdk = 35
-        versionCode = 470
-        versionName = "7.47"
+        versionCode = 480
+        versionName = "7.48"
     }
 
     signingConfigs {
