@@ -225,7 +225,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.49")
+        put("appVersion", "V7.50")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -600,7 +600,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.49") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.50") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1056,7 +1056,14 @@ fun ControleQueijosApp(context: Context) {
         }
     }
 
-    if (selectedTab == 6) item {
+    if (selectedTab == 6) item {            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("✅ Versão estável V7.50", style = MaterialTheme.typography.titleMedium)
+                    Text("Sistema revisado para uso diário: encomendas, entregas, produção, financeiro, clientes, relatórios, PDF, CSV, backup, sincronização e proteção por PIN.")
+                    Text("Usuário atual: $userName • Perfil: $userRole", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("👤 Usuário deste aparelho", style = MaterialTheme.typography.titleMedium); Text("$userName • $userRole"); OutlinedButton(onClick = { userDialog = true }) { Text("Gerenciar usuário") } } }
                     Text("Backup e transferência", style = MaterialTheme.typography.headlineSmall)
                     Text("Backup automático e manual para proteger os dados do Controle Queijos.")
