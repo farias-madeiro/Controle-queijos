@@ -1522,7 +1522,7 @@ private fun buildFinancialCsv(period: String, orders: List<Order>, payments: Lis
         appendLine(listOf("Recebimento", dateText(p.date), "Recebimento", order?.customerName ?: "", "%.2f".format(p.amount), p.note).joinToString(";") { csvCell(it) })
     }
     expenses.sortedByDescending { it.date }.forEach { e ->
-        appendLine(listOf("Gasto", dateText(e.date), e.description, "", "%.2f".format(e.amount), "").joinToString(";") { csvCell(it) })
+        appendLine(listOf("Gasto", dateText(e.date), e.description, "", "%.2f".format(e.value), "").joinToString(";") { csvCell(it) })
     }
 }
 
