@@ -27,6 +27,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.security.MessageDigest
+import io.github.jan.supabase.gotrue.providers.Email
 
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
 data class Sale(val id: Long, val productId: Long, val productName: String, val quantity: Int, val unitValue: Double, val unitCost: Double, val date: Long)
@@ -365,9 +366,71 @@ fun ControleQueijosApp(context: Context) {
     var userName by remember { mutableStateOf(prefs.getString(USER_NAME, "Administrador") ?: "Administrador") }
     var userRole by remember { mutableStateOf(prefs.getString(USER_ROLE, "Administrador") ?: "Administrador") }
     var userDialog by remember { mutableStateOf(false) }
+    var cloudDialog by remember { mutableStateOf(false) }
+    var cloudEmail by remember { mutableStateOf("") }
+    var cloudPassword by remember { mutableStateOf("") }
+    var cloudMessage by remember { mutableStateOf("") }
+    var cloudBusy by remember { mutableStateOf(false) }
+    var cloudLoggedIn by remember { mutableStateOf(controleQueijosSupabase.gotrue.currentSessionOrNull() != null) }
+    val cloudScope = rememberCoroutineScope()
 
     LaunchedEffect(products, sales, expenses, orders, clients, payments) {
         writeAutomaticBackup(context).onSuccess { autoBackupAt = it }
+    }
+
+    if (cloudDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!cloudBusy) cloudDialog = false },
+            title = { Text("☁️ Acesso à nuvem") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Use a mesma conta Supabase nos dois celulares.")
+                    OutlinedTextField(value = cloudEmail, onValueChange = { cloudEmail = it }, label = { Text("E-mail") }, singleLine = true)
+                    OutlinedTextField(value = cloudPassword, onValueChange = { cloudPassword = it }, label = { Text("Senha") }, singleLine = true)
+                    if (cloudMessage.isNotBlank()) Text(cloudMessage, style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                Button(enabled = !cloudBusy && cloudEmail.isNotBlank() && cloudPassword.isNotBlank(), onClick = {
+                    cloudBusy = true
+                    cloudMessage = "Conectando..."
+                    cloudScope.launch {
+                        runCatching {
+                            controleQueijosSupabase.gotrue.loginWith(Email) {
+                                email = cloudEmail.trim()
+                                password = cloudPassword
+                            }
+                        }.onSuccess {
+                            cloudLoggedIn = true
+                            cloudMessage = "Conectado com sucesso."
+                            cloudPassword = ""
+                        }.onFailure {
+                            cloudMessage = "Não foi possível entrar: " + (it.message ?: "verifique e-mail e senha.")
+                        }
+                        cloudBusy = false
+                    }
+                }) { Text("Entrar") }
+            },
+            dismissButton = {
+                OutlinedButton(enabled = !cloudBusy && cloudEmail.isNotBlank() && cloudPassword.length >= 6, onClick = {
+                    cloudBusy = true
+                    cloudMessage = "Criando conta..."
+                    cloudScope.launch {
+                        runCatching {
+                            controleQueijosSupabase.gotrue.signUpWith(Email) {
+                                email = cloudEmail.trim()
+                                password = cloudPassword
+                            }
+                        }.onSuccess {
+                            cloudMessage = "Conta criada. Se o Supabase pedir confirmação de e-mail, confirme antes de entrar."
+                        }.onFailure {
+                            cloudMessage = "Não foi possível criar a conta: " + (it.message ?: "verifique os dados.")
+                        }
+                        cloudBusy = false
+                    }
+                }) { Text("Criar conta") }
+            }
+        )
     }
 
     if (userDialog) {
@@ -600,7 +663,7 @@ fun ControleQueijosApp(context: Context) {
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.50") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.51") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1042,6 +1105,38 @@ fun ControleQueijosApp(context: Context) {
                     }, modifier = Modifier.fillMaxWidth()) { Text("Produção consolidada") }
                 }
                 if (selectedTab == 7) item {
+        Text("☁️ Nuvem", style = MaterialTheme.typography.titleMedium)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(if (cloudLoggedIn) "🟢 Conectado à nuvem" else "⚪ Não conectado", style = MaterialTheme.typography.titleMedium)
+                Text("Use a mesma conta Supabase nos dois celulares. A conta identifica os dados da empresa e o RLS protege o acesso.")
+                Button(onClick = { cloudDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (cloudLoggedIn) "Gerenciar acesso à nuvem" else "Entrar na nuvem")
+                }
+                if (cloudLoggedIn) {
+                    OutlinedButton(onClick = {
+                        cloudScope.launch {
+                            runCatching { controleQueijosSupabase.gotrue.logout() }
+                                .onSuccess { cloudLoggedIn = false; cloudMessage = "Sessão encerrada neste aparelho." }
+                                .onFailure { cloudMessage = it.message ?: "Não foi possível sair." }
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Sair da nuvem") }
+                }
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("🔄 Sincronização manual", style = MaterialTheme.typography.titleMedium)
+                Text("Use o mesmo arquivo de sincronização nos seus celulares como segurança. A sincronização em nuvem será ativada nas próximas etapas da V7.51.")
+                Text("Dados incluídos: clientes, encomendas, produtos, recebimentos, vendas e gastos.")
+                Button(onClick = { exportBackupLauncher.launch("Controle-Queijos-Sincronizacao.json") }, modifier = Modifier.fillMaxWidth()) { Text("Exportar dados para outro celular") }
+                OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Importar dados de outro celular") }
+                Text("⚠️ A importação substitui os dados atuais pelos dados do arquivo. Faça um backup antes de importar.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
+
         Text("Sincronização", style = MaterialTheme.typography.headlineSmall)
         Text("Use o mesmo arquivo de sincronização nos seus celulares para manter os dados iguais.", style = MaterialTheme.typography.bodySmall)
         Card(Modifier.fillMaxWidth()) {
