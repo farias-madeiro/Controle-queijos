@@ -28,6 +28,7 @@ import java.util.Date
 import java.util.Locale
 import java.security.MessageDigest
 import io.github.jan.supabase.gotrue.providers.Email
+import kotlinx.coroutines.launch
 
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
 data class Sale(val id: Long, val productId: Long, val productName: String, val quantity: Int, val unitValue: Double, val unitCost: Double, val date: Long)
@@ -371,7 +372,7 @@ fun ControleQueijosApp(context: Context) {
     var cloudPassword by remember { mutableStateOf("") }
     var cloudMessage by remember { mutableStateOf("") }
     var cloudBusy by remember { mutableStateOf(false) }
-    var cloudLoggedIn by remember { mutableStateOf(controleQueijosSupabase.gotrue.currentSessionOrNull() != null) }
+    var cloudLoggedIn by remember { mutableStateOf(controleQueijosSupabase.auth.currentSessionOrNull() != null) }
     val cloudScope = rememberCoroutineScope()
 
     LaunchedEffect(products, sales, expenses, orders, clients, payments) {
