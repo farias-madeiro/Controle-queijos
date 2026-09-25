@@ -1,7 +1,7 @@
 package br.com.controlequeijos
 
 import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.gotrue.Auth
+import io.github.jan.supabase.auth.Auth
 
 val controleQueijosSupabase = createSupabaseClient(
     supabaseUrl = BuildConfig.SUPABASE_URL,
