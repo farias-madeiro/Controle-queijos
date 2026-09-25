@@ -125,6 +125,17 @@ create trigger cq_products_touch before update on public.cq_products for each ro
 drop trigger if exists cq_orders_touch on public.cq_orders;
 create trigger cq_orders_touch before update on public.cq_orders for each row execute function public.cq_touch_updated_at();
 
+
+-- Acesso explícito à Data API para usuários autenticados.
+-- O RLS continua limitando cada linha ao usuário autenticado.
+grant select, insert, update, delete on table
+  public.cq_clients, public.cq_products, public.cq_orders,
+  public.cq_payments, public.cq_sales, public.cq_expenses
+  to authenticated;
+
+-- Necessário para IDs gerados por identity.
+grant usage, select on all sequences in schema public to authenticated;
+
 comment on table public.cq_clients is 'Controle Queijos — clientes sincronizados na nuvem';
 comment on table public.cq_products is 'Controle Queijos — produtos sincronizados na nuvem';
 comment on table public.cq_orders is 'Controle Queijos — encomendas sincronizadas na nuvem';
