@@ -27,7 +27,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.security.MessageDigest
-import io.github.jan.supabase.gotrue.providers.Email
+import io.github.jan.supabase.auth.providers.Email
 import kotlinx.coroutines.launch
 
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
