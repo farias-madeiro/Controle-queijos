@@ -6,7 +6,7 @@ plugins {
 }
 android {
     namespace = "br.com.controlequeijos"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "br.com.controlequeijos"
         minSdk = 24
