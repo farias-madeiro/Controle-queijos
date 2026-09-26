@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.21 — melhorias no gerenciamento de clientes e pedidos
+// V7.6 — agenda e organização das encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -1359,6 +1359,19 @@ fun ControleQueijosApp(context: Context) {
                 }
 if (selectedTab == 2) item {
                     Text("Encomendas", style = MaterialTheme.typography.headlineSmall)
+                    val activeOrders = orders.filter { it.status != "Cancelada" }
+                    val overdueCount = activeOrders.count { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+                    val todayCount = activeOrders.count { it.status != "Entregue" && sameDay(it.deliveryDate) }
+                    val tomorrowCount = activeOrders.count { it.status != "Entregue" && sameDayOffset(it.deliveryDate, 1) }
+                    val nextSevenCount = activeOrders.count { it.status != "Entregue" && inNextSevenDays(it.deliveryDate) }
+                    val pendingUnits = activeOrders.filter { it.status == "Pendente" || it.status == "Em produção" }.sumOf { it.quantity }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("📅 Agenda de entregas", style = MaterialTheme.typography.titleMedium)
+                            Text("Hoje: $todayCount • Amanhã: $tomorrowCount • Próximos 7 dias: $nextSevenCount")
+                            Text("Atrasadas: $overdueCount • Unidades pendentes de entrega: $pendingUnits")
+                        }
+                    }
                     OutlinedTextField(
                         value = orderSearch,
                         onValueChange = { orderSearch = it },
@@ -1367,7 +1380,7 @@ if (selectedTab == 2) item {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Todas", "Pendentes", "Em produção", "Hoje", "Atrasadas", "Entregues", "Canceladas").forEach { f ->
+                        listOf("Todas", "Pendentes", "Em produção", "Hoje", "Amanhã", "7 dias", "Atrasadas", "Entregues", "Canceladas").forEach { f ->
                             if (orderFilter == f) Button(onClick = { orderFilter = f }) { Text(f) }
                             else OutlinedButton(onClick = { orderFilter = f }) { Text(f) }
                         }
