@@ -47,7 +47,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-Queijos-V7.52-release
+          name: Controle-Queijos-V7.6-release
           path: app/build/outputs/apk/release/app-release.apk
 
 # V7.19.1 — assinatura permanente para atualizações futuras
