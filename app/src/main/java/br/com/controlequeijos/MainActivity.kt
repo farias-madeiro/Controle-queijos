@@ -92,7 +92,7 @@ private fun loadProducts(context: Context): List<Product> = runCatching {
     }
 }.getOrDefault(emptyList())
 
-private fun saveProducts(context: Context, products: List<Product>) {
+fun saveProducts(context: Context, products: List<Product>) {
     val json = JSONArray()
     products.forEach { p ->
         json.put(JSONObject().apply {
@@ -116,7 +116,7 @@ private fun loadSales(context: Context): List<Sale> = runCatching {
     }
 }.getOrDefault(emptyList())
 
-private fun saveSales(context: Context, sales: List<Sale>) {
+fun saveSales(context: Context, sales: List<Sale>) {
     val json = JSONArray()
     sales.forEach { s ->
         json.put(JSONObject().apply {
@@ -139,7 +139,7 @@ private fun loadExpenses(context: Context): List<Expense> = runCatching {
     if (old > 0) listOf(Expense(System.currentTimeMillis(), "Gasto anterior", old, System.currentTimeMillis())) else emptyList()
 }.getOrDefault(emptyList())
 
-private fun saveExpenses(context: Context, expenses: List<Expense>) {
+fun saveExpenses(context: Context, expenses: List<Expense>) {
     val json = JSONArray()
     expenses.forEach { e ->
         json.put(JSONObject().apply {
@@ -163,7 +163,7 @@ private fun loadPayments(context: Context): List<Payment> = runCatching {
     }
 }.getOrDefault(emptyList())
 
-private fun savePayments(context: Context, payments: List<Payment>) {
+fun savePayments(context: Context, payments: List<Payment>) {
     val json = JSONArray()
     payments.forEach { p ->
         json.put(JSONObject().apply {
@@ -186,7 +186,7 @@ private fun loadClients(context: Context): List<Client> = runCatching {
     }
 }.getOrDefault(emptyList())
 
-private fun saveClients(context: Context, clients: List<Client>) {
+fun saveClients(context: Context, clients: List<Client>) {
     val json = JSONArray()
     clients.forEach { c ->
         json.put(JSONObject().apply {
@@ -209,7 +209,7 @@ private fun loadOrders(context: Context): List<Order> = runCatching {
     }
 }.getOrDefault(emptyList())
 
-private fun saveOrders(context: Context, orders: List<Order>) {
+fun saveOrders(context: Context, orders: List<Order>) {
     val json = JSONArray()
     orders.forEach { o ->
         json.put(JSONObject().apply {
