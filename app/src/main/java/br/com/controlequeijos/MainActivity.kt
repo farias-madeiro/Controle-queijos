@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.6 — agenda e organização das encomendas
+// V7.7 — melhorias financeiras e contas a receber
 
 import android.content.Context
 import android.os.Bundle
@@ -654,9 +654,17 @@ fun ControleQueijosApp(context: Context) {
     }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
+    val directSalesRevenue = saleRevenue
+    val deliveredOrdersRevenue = orderRevenue
+    val clientReceivables = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }
+        .groupBy { normalizeSearch(it.customerName) }
+        .map { (_, group) -> group.first().customerName.trim() to (group.sumOf { it.totalValue } - group.sumOf { it.paidValue }).coerceAtLeast(0.0) }
+        .sortedByDescending { it.second }
+    val averageOrderTicket = if (deliveredOrders.isNotEmpty()) deliveredOrdersRevenue / deliveredOrders.size else 0.0
+    val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.51") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.7") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -995,6 +1003,33 @@ fun ControleQueijosApp(context: Context) {
                     Text("Recebimentos registrados: " + filteredPayments.size)
                     Text("Gastos lançados: " + filteredExpenses.size)
                     Text("Encomendas canceladas: " + filteredOrders.count { it.status == "Cancelada" })
+                    Spacer(Modifier.height(8.dp))
+                    Text("📊 Composição do faturamento", style = MaterialTheme.typography.titleMedium)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Vendas diretas: R$ %.2f".format(directSalesRevenue))
+                            Text("Encomendas entregues: R$ %.2f".format(deliveredOrdersRevenue))
+                            Text("Custos das vendas/encomendas: R$ %.2f".format(cost))
+                            Text("Despesas: R$ %.2f".format(expenseTotal))
+                            Text("Lucro líquido: R$ %.2f".format(profit))
+                            Text("Ticket médio — encomendas entregues: R$ %.2f".format(averageOrderTicket))
+                            Text("Ticket médio — vendas diretas: R$ %.2f".format(averageDirectSaleTicket))
+                        }
+                    }
+                    Text("💳 Contas a receber por cliente", style = MaterialTheme.typography.titleMedium)
+                    if (clientReceivables.isEmpty()) {
+                        Text("Nenhum saldo em aberto no período.")
+                    } else {
+                        clientReceivables.take(15).forEach { (name, balance) ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(name, modifier = Modifier.weight(1f))
+                                    Text("R$ %.2f".format(balance), style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                        if (clientReceivables.size > 15) Text("Mais " + (clientReceivables.size - 15) + " cliente(s) com saldo em aberto.")
+                    }
                     Spacer(Modifier.height(8.dp))
                     Text("Histórico de recebimentos", style = MaterialTheme.typography.titleMedium)
                     if (filteredPayments.isEmpty()) Text("Nenhum recebimento no período.") else filteredPayments.sortedByDescending { it.date }.take(10).forEach { payment ->
