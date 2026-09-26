@@ -27,6 +27,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.security.MessageDigest
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.launch
 
