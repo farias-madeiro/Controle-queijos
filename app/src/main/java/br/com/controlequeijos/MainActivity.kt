@@ -373,6 +373,8 @@ fun ControleQueijosApp(context: Context) {
     var cloudPassword by remember { mutableStateOf("") }
     var cloudMessage by remember { mutableStateOf("") }
     var cloudBusy by remember { mutableStateOf(false) }
+    var syncBusy by remember { mutableStateOf(false) }
+    var syncMessage by remember { mutableStateOf("") }
     var cloudLoggedIn by remember { mutableStateOf(controleQueijosSupabase.auth.currentSessionOrNull() != null) }
     val cloudScope = rememberCoroutineScope()
 
@@ -1118,10 +1120,38 @@ fun ControleQueijosApp(context: Context) {
             }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("🔄 Sincronização por arquivo", style = MaterialTheme.typography.titleMedium)
-                    Text("Continua disponível como segurança enquanto concluímos a sincronização automática em nuvem.")
-                    Button(onClick = { exportBackupLauncher.launch("Controle-Queijos-Sincronizacao.json") }, modifier = Modifier.fillMaxWidth()) { Text("Exportar dados") }
-                    OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Importar dados") }
+                    Text("🔄 Sincronização na nuvem", style = MaterialTheme.typography.titleMedium)
+                    Text("Envie os dados deste celular e baixe os dados da mesma conta Supabase.")
+                    Button(
+                        enabled = cloudLoggedIn && !syncBusy,
+                        onClick = {
+                            syncBusy = true
+                            syncMessage = "Sincronizando..."
+                            cloudScope.launch {
+                                uploadControleQueijos(products, sales, expenses, orders, clients, payments)
+                                    .onSuccess {
+                                        downloadControleQueijos()
+                                            .onSuccess { data ->
+                                                saveCloudDataLocally(context, data)
+                                                products = data.products
+                                                sales = data.sales
+                                                expenses = data.expenses
+                                                orders = data.orders
+                                                clients = data.clients
+                                                payments = data.payments
+                                                syncMessage = "Sincronização concluída. Dados atualizados."
+                                            }
+                                            .onFailure { syncMessage = "Falha ao baixar: " + (it.message ?: "erro desconhecido.") }
+                                    }
+                                    .onFailure { syncMessage = "Falha ao enviar: " + (it.message ?: "erro desconhecido.") }
+                                syncBusy = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (syncBusy) "Sincronizando..." else "☁️ Sincronizar agora") }
+                    if (syncMessage.isNotBlank()) Text(syncMessage, style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = { exportBackupLauncher.launch("Controle-Queijos-Sincronizacao.json") }, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup") }
+                    OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Importar backup") }
                 }
             }
         }
