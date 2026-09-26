@@ -1,5 +1,6 @@
 package br.com.controlequeijos
 
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.serialization.Serializable
 
