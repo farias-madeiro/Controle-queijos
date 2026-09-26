@@ -27,7 +27,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.security.MessageDigest
-import io.github.jan.supabase.auth.providers.Email
+import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.launch
 
 data class Product(val id: Long, val name: String, val quantity: Int, val entryValue: Double, val exitValue: Double)
@@ -396,7 +396,7 @@ fun ControleQueijosApp(context: Context) {
                     cloudBusy = true; cloudMessage = "Conectando..."
                     cloudScope.launch {
                         runCatching {
-                            controleQueijosSupabase.auth.loginWith(Email) {
+                            controleQueijosSupabase.auth.signInWith(Email) {
                                 email = cloudEmail.trim(); password = cloudPassword
                             }
                         }.onSuccess {
@@ -1107,7 +1107,7 @@ fun ControleQueijosApp(context: Context) {
                     if (cloudLoggedIn) {
                         OutlinedButton(onClick = {
                             cloudScope.launch {
-                                runCatching { controleQueijosSupabase.auth.logout() }
+                                runCatching { controleQueijosSupabase.auth.signOut() }
                                     .onSuccess { cloudLoggedIn = false; cloudMessage = "Sessão encerrada neste aparelho." }
                                     .onFailure { cloudMessage = it.message ?: "Não foi possível sair." }
                             }
