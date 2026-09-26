@@ -396,7 +396,7 @@ fun ControleQueijosApp(context: Context) {
                     cloudBusy = true; cloudMessage = "Conectando..."
                     cloudScope.launch {
                         runCatching {
-                            controleQueijosSupabase.gotrue.loginWith(Email) {
+                            controleQueijosSupabase.auth.loginWith(Email) {
                                 email = cloudEmail.trim(); password = cloudPassword
                             }
                         }.onSuccess {
@@ -411,7 +411,7 @@ fun ControleQueijosApp(context: Context) {
                     cloudBusy = true; cloudMessage = "Criando conta..."
                     cloudScope.launch {
                         runCatching {
-                            controleQueijosSupabase.gotrue.signUpWith(Email) {
+                            controleQueijosSupabase.auth.signUpWith(Email) {
                                 email = cloudEmail.trim(); password = cloudPassword
                             }
                         }.onSuccess { cloudMessage = "Conta criada. Se o Supabase pedir confirmação, confirme o e-mail antes de entrar." }
@@ -1107,7 +1107,7 @@ fun ControleQueijosApp(context: Context) {
                     if (cloudLoggedIn) {
                         OutlinedButton(onClick = {
                             cloudScope.launch {
-                                runCatching { controleQueijosSupabase.gotrue.logout() }
+                                runCatching { controleQueijosSupabase.auth.logout() }
                                     .onSuccess { cloudLoggedIn = false; cloudMessage = "Sessão encerrada neste aparelho." }
                                     .onFailure { cloudMessage = it.message ?: "Não foi possível sair." }
                             }
