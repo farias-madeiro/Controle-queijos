@@ -76,3 +76,12 @@ suspend fun downloadControleQueijos(): Result<ControleQueijosCloudData> = runCat
         expenses = expenses.map { Expense(it.id, it.description, it.value, it.expense_date) }
     )
 }
+
+fun saveCloudDataLocally(context: android.content.Context, data: ControleQueijosCloudData) {
+    saveClients(context, data.clients)
+    saveProducts(context, data.products)
+    saveOrders(context, data.orders)
+    savePayments(context, data.payments)
+    saveSales(context, data.sales)
+    saveExpenses(context, data.expenses)
+}
