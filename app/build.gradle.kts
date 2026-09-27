@@ -11,8 +11,8 @@ android {
         applicationId = "br.com.controlequeijos"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1300
-        versionName = "7.13"
+        versionCode = 1400
+        versionName = "7.14"
         buildConfigField("String", "SUPABASE_URL", "\"https://vebrvocwgosaclbavqxf.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_8XGCr-exfHkwcUu1DRm1RA_d8mT10Jf\"")
     }
