@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.8 — organização do catálogo e apoio opcional ao estoque
+// V7.9 — clientes vinculados às encomendas e prevenção de duplicidade
 
 import android.content.Context
 import android.os.Bundle
@@ -1603,7 +1603,7 @@ if (selectedTab == 2) item {
     }
 
     orderDialogProduct?.let { p ->
-        OrderDialog(p, null, { orderDialogProduct = null }) { customer, q, delivery, paid ->
+        OrderDialog(p, null, clients, { orderDialogProduct = null }) { customer, q, delivery, paid ->
             val now = System.currentTimeMillis()
             val total = q * p.exitValue
             val customerId = clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(customer) }?.id ?: 0L
@@ -1615,7 +1615,7 @@ if (selectedTab == 2) item {
     }
 
     editingOrder?.let { o ->
-        OrderDialog(products.find { it.id == o.productId } ?: Product(o.productId, o.productName, 0, o.unitCost, o.unitValue), o, { editingOrder = null }) { customer, q, delivery, paid ->
+        OrderDialog(products.find { it.id == o.productId } ?: Product(o.productId, o.productName, 0, o.unitCost, o.unitValue), o, clients, { editingOrder = null }) { customer, q, delivery, paid ->
             val total = q * o.unitValue
             val updated = orders.map {
                 if (it.id == o.id) it.copy(
@@ -2132,12 +2132,18 @@ private fun SaleDialog(product: Product, onDismiss: () -> Unit, onSave: (Int) ->
 }
 
 @Composable
-private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, onSave: (String, Int, Long, Double) -> Unit) {
+private fun OrderDialog(product: Product, order: Order?, clients: List<Client>, onDismiss: () -> Unit, onSave: (String, Int, Long, Double) -> Unit) {
     var customer by remember(order) { mutableStateOf(order?.customerName ?: "") }
     var quantity by remember(order) { mutableStateOf(order?.quantity?.toString() ?: "1") }
     var delivery by remember(order) { mutableStateOf(if (order == null) dateOnly(defaultDeliveryDate()) else dateOnly(order.deliveryDate)) }
     var paid by remember(order) { mutableStateOf(order?.paidValue?.toString() ?: "0") }
     var validationError by remember(order) { mutableStateOf("") }
+
+    val matchingClients = clients
+        .filter { customer.isNotBlank() && normalizeSearch(it.name).contains(normalizeSearch(customer)) }
+        .sortedBy { normalizeSearch(it.name) }
+        .take(5)
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (order == null) "Nova encomenda" else "Editar encomenda") },
@@ -2145,7 +2151,30 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Produto: " + product.name)
                 Text("Valor de venda: R$ %.2f/un.".format(order?.unitValue ?: product.exitValue))
-                OutlinedTextField(customer, { customer = it }, label = { Text("Nome do cliente") }, singleLine = true)
+                OutlinedTextField(
+                    customer,
+                    { customer = it; validationError = "" },
+                    label = { Text("Nome do cliente") },
+                    singleLine = true
+                )
+                if (matchingClients.isNotEmpty()) {
+                    Text("Clientes cadastrados", style = MaterialTheme.typography.labelLarge)
+                    matchingClients.forEach { client ->
+                        OutlinedButton(
+                            onClick = {
+                                customer = client.name
+                                validationError = ""
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (client.phone.isNotBlank()) client.name + " • " + client.phone else client.name
+                            )
+                        }
+                    }
+                } else if (clients.isEmpty()) {
+                    Text("Dica: cadastre o cliente na aba Clientes para vinculá-lo automaticamente à encomenda.")
+                }
                 OutlinedTextField(
                     quantity,
                     { quantity = it.filter(Char::isDigit); validationError = "" },
@@ -2178,7 +2207,6 @@ private fun OrderDialog(product: Product, order: Order?, onDismiss: () -> Unit, 
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }
-
 @Composable
 private fun ExpenseDialog(onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
     var description by remember { mutableStateOf("") }
