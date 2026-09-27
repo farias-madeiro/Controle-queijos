@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.7 — melhorias financeiras e contas a receber
+// V7.8 — organização do catálogo e apoio opcional ao estoque
 
 import android.content.Context
 import android.os.Bundle
@@ -347,6 +347,7 @@ fun ControleQueijosApp(context: Context) {
     var orderSort by remember { mutableStateOf("Entrega") }
     var clientSearch by remember { mutableStateOf("") }
     var clientFilter by remember { mutableStateOf("Todos") }
+    var productSearch by remember { mutableStateOf("") }
     var backupMessage by remember { mutableStateOf("") }
     var deleteMessage by remember { mutableStateOf("") }
     var pendingDeleteTitle by remember { mutableStateOf("") }
@@ -1256,16 +1257,41 @@ fun ControleQueijosApp(context: Context) {
                     OutlinedButton(onClick = { expenseDialog = true }) { Text("Novo gasto") }
                 }
 
-                if (selectedTab == 2) item { Text("Produtos / Catálogo", style = MaterialTheme.typography.headlineSmall) }
+                if (selectedTab == 2) item {
+                    Text("Produtos / Catálogo", style = MaterialTheme.typography.headlineSmall)
+                    Text("O estoque é opcional. O foco continua sendo vendas e encomendas.", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(value = productSearch, onValueChange = { productSearch = it }, label = { Text("Buscar produto") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+                val visibleProducts = products.filter { normalizeSearch(it.name).contains(normalizeSearch(productSearch)) }
+                if (selectedTab == 2) item {
+                    val productsWithStock = products.count { it.quantity > 0 }
+                    val lowStock = products.count { it.quantity in 1..5 }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("📊 Resumo dos produtos", style = MaterialTheme.typography.titleMedium)
+                            Text("Cadastrados: " + products.size + " • Com quantidade informada: " + productsWithStock + " • Estoque baixo: " + lowStock)
+                        }
+                    }
+                }
                 if (selectedTab == 2 && products.isEmpty()) item { Text("Nenhum produto cadastrado.") }
-                if (selectedTab == 2) items(products, key = { it.id }) { p ->
+                if (selectedTab == 2 && products.isNotEmpty() && visibleProducts.isEmpty()) item { Text("Nenhum produto encontrado.") }
+                if (selectedTab == 2) items(visibleProducts, key = { it.id }) { p ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(p.name, style = MaterialTheme.typography.titleMedium)
                             Text("Disponibilidade: por encomenda")
+                            if (p.quantity in 1..5) {
+                                Text("⚠️ Quantidade informada baixa: " + p.quantity + " un.", color = MaterialTheme.colorScheme.error)
+                            } else if (p.quantity > 5) {
+                                Text("Quantidade informada: " + p.quantity + " un.")
+                            } else {
+                                Text("Quantidade: não informada")
+                            }
                             Text("Custo: R$ %.2f/un.".format(p.entryValue))
                             Text("Saída: R$ %.2f/un.".format(p.exitValue))
                             Text("Lucro por unidade: R$ %.2f".format(p.exitValue - p.entryValue))
+                            val margin = if (p.exitValue > 0.0) ((p.exitValue - p.entryValue) / p.exitValue) * 100.0 else 0.0
+                            Text("Margem sobre a venda: %.1f%%".format(margin))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { saleDialogProduct = p }) { Text("Registrar venda") }
                                 OutlinedButton(onClick = { orderDialogProduct = p }) { Text("Encomenda") }
@@ -2069,7 +2095,8 @@ private fun ProductDialog(product: Product?, onDismiss: () -> Unit, onSave: (Str
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text("Nome") }, singleLine = true)
-                OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade em estoque") }, singleLine = true)
+                OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade disponível (opcional)") }, singleLine = true)
+                Text("Para produtos sob encomenda, você pode deixar 0 e usar apenas custo e preço de venda.")
                 OutlinedTextField(entry, { entry = it.replace(",", ".") }, label = { Text("Valor de entrada (custo/unidade)") }, singleLine = true)
                 OutlinedTextField(exit, { exit = it.replace(",", ".") }, label = { Text("Valor de saída (venda/unidade)") }, singleLine = true)
             }
