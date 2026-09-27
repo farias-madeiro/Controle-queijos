@@ -371,6 +371,9 @@ fun ControleQueijosApp(context: Context) {
     var userName by remember { mutableStateOf(prefs.getString(USER_NAME, "Administrador") ?: "Administrador") }
     var userRole by remember { mutableStateOf(prefs.getString(USER_ROLE, "Administrador") ?: "Administrador") }
     var userDialog by remember { mutableStateOf(false) }
+    var rolePinDialog by remember { mutableStateOf(false) }
+    var rolePinInput by remember { mutableStateOf("") }
+    var rolePinError by remember { mutableStateOf("") }
     var cloudDialog by remember { mutableStateOf(false) }
     var cloudEmail by remember { mutableStateOf("") }
     var cloudPassword by remember { mutableStateOf("") }
@@ -440,11 +443,11 @@ fun ControleQueijosApp(context: Context) {
                     Text("Perfil de acesso", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         if (userRole == "Administrador") Button(onClick = { userRole = "Administrador" }) { Text("Administrador") }
-                        else OutlinedButton(onClick = { userRole = "Administrador" }) { Text("Administrador") }
+                        else OutlinedButton(onClick = { rolePinInput = ""; rolePinError = ""; rolePinDialog = true }) { Text("Administrador") }
                         if (userRole == "Operador") Button(onClick = { userRole = "Operador" }) { Text("Operador") }
                         else OutlinedButton(onClick = { userRole = "Operador" }) { Text("Operador") }
                     }
-                    Text("Administrador: acesso completo. Operador: rotinas do dia a dia, sem Backup e Sincronização.", style = MaterialTheme.typography.bodySmall)
+                    Text("Administrador: acesso completo. Operador: rotinas do dia a dia, sem Backup e Sincronização. Para elevar Operador a Administrador, será solicitado o PIN do aplicativo.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
@@ -459,6 +462,43 @@ fun ControleQueijosApp(context: Context) {
                 }) { Text("Salvar") }
             },
             dismissButton = { TextButton(onClick = { userDialog = false }) { Text("Cancelar") } }
+        )
+    }
+
+    if (rolePinDialog) {
+        AlertDialog(
+            onDismissRequest = { rolePinDialog = false; rolePinInput = ""; rolePinError = "" },
+            title = { Text("🔐 Autorizar Administrador") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Digite o PIN do aplicativo para alterar este aparelho para o perfil Administrador.")
+                    OutlinedTextField(
+                        value = rolePinInput,
+                        onValueChange = { if (it.all(Char::isDigit) && it.length <= 8) { rolePinInput = it; rolePinError = "" } },
+                        label = { Text("PIN") },
+                        singleLine = true
+                    )
+                    if (rolePinError.isNotBlank()) Text(rolePinError, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (hasPin && hashPin(rolePinInput) == prefs.getString(PIN_HASH, "")) {
+                        userRole = "Administrador"
+                        rolePinDialog = false
+                        rolePinInput = ""
+                        rolePinError = ""
+                    } else if (!hasPin) {
+                        rolePinError = "Configure um PIN do aplicativo antes de usar esta proteção."
+                    } else {
+                        rolePinError = "PIN incorreto."
+                        rolePinInput = ""
+                    }
+                }) { Text("Autorizar") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { rolePinDialog = false; rolePinInput = ""; rolePinError = "" }) { Text("Cancelar") }
+            }
         )
     }
 
@@ -675,7 +715,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.12") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.17") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
