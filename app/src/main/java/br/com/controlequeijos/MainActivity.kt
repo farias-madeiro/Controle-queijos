@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.10 — clientes: prevenção de duplicidade e vínculo consistente com encomendas
+// V7.11 — relatório financeiro com entrada, saída e lucro das encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -584,6 +584,7 @@ fun ControleQueijosApp(context: Context) {
     val saleCost = filteredSales.sumOf { it.quantity * it.unitCost }
     val orderRevenue = deliveredOrders.sumOf { it.totalValue }
     val orderCost = deliveredOrders.sumOf { it.quantity * it.unitCost }
+    val orderGrossProfit = orderRevenue - orderCost
     val revenue = saleRevenue + orderRevenue
     val cost = saleCost + orderCost
     val expenseTotal = filteredExpenses.sumOf { it.value }
@@ -665,7 +666,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.10") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.11") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1052,7 +1053,9 @@ fun ControleQueijosApp(context: Context) {
                 if (selectedTab == 5) item {
                     Text("Relatórios", style = MaterialTheme.typography.headlineSmall)
                     Text("Vendas: R$ %.2f".format(saleRevenue))
-                    Text("Encomendas entregues: R$ %.2f".format(orderRevenue))
+                    Text("Encomendas entregues (saída): R$ %.2f".format(orderRevenue))
+                    Text("Entrada das encomendas: R$ %.2f".format(orderCost))
+                    Text("Lucro das encomendas: R$ %.2f".format(orderGrossProfit))
                     Text("Gastos: R$ %.2f".format(expenseTotal))
                     Text("Lucro: R$ %.2f".format(profit))
                     Text("Recebido de encomendas: R$ %.2f".format(ordersPaid))
@@ -1076,7 +1079,7 @@ fun ControleQueijosApp(context: Context) {
                         }, modifier = Modifier.weight(1f)) { Text("Lista de produção") }
                         OutlinedButton(onClick = {
                             val report = buildFinancialReportText(
-                                period, saleRevenue, orderRevenue, cost, expenseTotal,
+                                period, saleRevenue, orderRevenue, orderCost, cost, expenseTotal,
                                 profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
                                 pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size,
                                 filteredPayments.sumOf { it.amount }, filteredPayments.size
@@ -1103,7 +1106,7 @@ fun ControleQueijosApp(context: Context) {
                         }, modifier = Modifier.weight(1f)) { Text("PDF produção") }
                         OutlinedButton(onClick = {
                             pendingPdfText = buildFinancialReportText(
-                                period, saleRevenue, orderRevenue, cost, expenseTotal,
+                                period, saleRevenue, orderRevenue, orderCost, cost, expenseTotal,
                                 profit, profitMargin, ordersTotal, ordersPaid, ordersReceivable,
                                 pendingOrders.size, productionOrders.size, overdueOrders.size, dueTodayOrders.size,
                                 filteredPayments.sumOf { it.amount }, filteredPayments.size
@@ -1835,16 +1838,18 @@ private fun buildFinancialCsv(period: String, orders: List<Order>, payments: Lis
     appendLine("CONTROLE QUEIJOS — FINANCEIRO")
     appendLine("Período;${csvCell(period)}")
     appendLine()
-    appendLine("TIPO;Data;Descrição;Cliente;Valor;Observação")
+    appendLine("TIPO;Data;Descrição;Cliente;Saída;Entrada;Lucro;Observação")
     orders.sortedByDescending { it.orderDate }.forEach { order ->
-        appendLine(listOf("Encomenda", dateOnly(order.orderDate), order.productName, order.customerName, "%.2f".format(order.totalValue), order.status).joinToString(";") { csvCell(it) })
+        val entry = order.quantity * order.unitCost
+        val profit = order.totalValue - entry
+        appendLine(listOf("Encomenda", dateOnly(order.orderDate), order.productName, order.customerName, "%.2f".format(order.totalValue), "%.2f".format(entry), "%.2f".format(profit), order.status).joinToString(";") { csvCell(it) })
     }
     payments.sortedByDescending { it.date }.forEach { p ->
         val order = orders.firstOrNull { it.id == p.orderId }
-        appendLine(listOf("Recebimento", dateText(p.date), "Recebimento", order?.customerName ?: "", "%.2f".format(p.amount), p.note).joinToString(";") { csvCell(it) })
+        appendLine(listOf("Recebimento", dateText(p.date), "Recebimento", order?.customerName ?: "", "%.2f".format(p.amount), "", "", p.note).joinToString(";") { csvCell(it) })
     }
     expenses.sortedByDescending { it.date }.forEach { e ->
-        appendLine(listOf("Gasto", dateText(e.date), e.description, "", "%.2f".format(e.value), "").joinToString(";") { csvCell(it) })
+        appendLine(listOf("Gasto", dateText(e.date), e.description, "", "%.2f".format(e.value), "", "", "").joinToString(";") { csvCell(it) })
     }
 }
 
@@ -1899,6 +1904,7 @@ private fun buildFinancialReportText(
     period: String,
     saleRevenue: Double,
     orderRevenue: Double,
+    orderEntryCost: Double,
     cost: Double,
     expenses: Double,
     profit: Double,
@@ -1917,9 +1923,11 @@ private fun buildFinancialReportText(
     appendLine("Período: " + period)
     appendLine()
     appendLine("Vendas realizadas: R$ %.2f".format(saleRevenue))
-    appendLine("Encomendas entregues: R$ %.2f".format(orderRevenue))
+    appendLine("Encomendas entregues — saída: R$ %.2f".format(orderRevenue))
+    appendLine("Encomendas entregues — entrada: R$ %.2f".format(orderEntryCost))
+    appendLine("Lucro bruto das encomendas: R$ %.2f".format(orderRevenue - orderEntryCost))
     appendLine("Faturamento: R$ %.2f".format(saleRevenue + orderRevenue))
-    appendLine("Custo das mercadorias: R$ %.2f".format(cost))
+    appendLine("Custo total das mercadorias: R$ %.2f".format(cost))
     appendLine("Gastos: R$ %.2f".format(expenses))
     appendLine("Lucro líquido: R$ %.2f".format(profit))
     appendLine("Margem: %.2f%%".format(margin))
