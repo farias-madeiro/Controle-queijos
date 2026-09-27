@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.9 — clientes vinculados às encomendas e prevenção de duplicidade
+// V7.10 — clientes: prevenção de duplicidade e vínculo consistente com encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -228,7 +228,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.50")
+        put("appVersion", "V7.10")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -665,7 +665,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.7") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.10") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1568,7 +1568,7 @@ if (selectedTab == 2) item {
             }
         }
 
-    if (clientDialog) ClientDialog(editingClient, { clientDialog = false }) { name, phone, notes ->
+    if (clientDialog) ClientDialog(editingClient, clients, { clientDialog = false }) { name, phone, notes ->
         val existing = editingClient
         val saved = if (existing == null) clients + Client(System.currentTimeMillis(), name, phone, notes)
         else clients.map { if (it.id == existing.id) existing.copy(name = name, phone = phone, notes = notes) else it }
@@ -2036,22 +2036,64 @@ private fun ClientStatementDialog(client: Client, orders: List<Order>, payments:
 }
 
 @Composable
-private fun ClientDialog(client: Client?, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit) {
+private fun ClientDialog(
+    client: Client?,
+    clients: List<Client>,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit
+) {
     var name by remember(client) { mutableStateOf(client?.name ?: "") }
     var phone by remember(client) { mutableStateOf(client?.phone ?: "") }
     var notes by remember(client) { mutableStateOf(client?.notes ?: "") }
+    var validationError by remember(client) { mutableStateOf("") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (client == null) "Cadastrar cliente" else "Editar cliente") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Nome") }, singleLine = true)
-                OutlinedTextField(phone, { phone = it }, label = { Text("Telefone/WhatsApp") }, singleLine = true)
-                OutlinedTextField(notes, { notes = it }, label = { Text("Observações") }, minLines = 2)
+                OutlinedTextField(
+                    name,
+                    { name = it; validationError = "" },
+                    label = { Text("Nome") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    phone,
+                    { phone = it; validationError = "" },
+                    label = { Text("Telefone/WhatsApp") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    notes,
+                    { notes = it },
+                    label = { Text("Observações") },
+                    minLines = 2
+                )
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
-            Button(onClick = { if (name.isNotBlank()) onSave(name.trim(), phone.trim(), notes.trim()) }) { Text("Salvar") }
+            Button(onClick = {
+                val cleanName = name.trim()
+                val cleanPhone = phone.trim()
+                val duplicateName = clients.any {
+                    it.id != client?.id && normalizeSearch(it.name) == normalizeSearch(cleanName)
+                }
+                val phoneDigits = normalizePhone(cleanPhone)
+                val duplicatePhone = phoneDigits.isNotBlank() && clients.any {
+                    it.id != client?.id && normalizePhone(it.phone) == phoneDigits
+                }
+
+                when {
+                    cleanName.isBlank() -> validationError = "Informe o nome do cliente."
+                    duplicateName -> validationError = "Já existe um cliente cadastrado com esse nome."
+                    duplicatePhone -> validationError = "Já existe um cliente cadastrado com esse telefone."
+                    else -> onSave(cleanName, cleanPhone, notes.trim())
+                }
+            }) { Text("Salvar") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
     )
