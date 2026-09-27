@@ -1080,6 +1080,47 @@ fun ControleQueijosApp(context: Context) {
                     Text("Entregas atrasadas: " + overdueOrders.size)
                     Text("Entregas previstas para hoje: " + dueTodayOrders.size)
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
+                    Spacer(Modifier.height(8.dp))
+                    Text("📦 Relatório de encomendas", style = MaterialTheme.typography.titleMedium)
+                    Text("Resumo de status, unidades, venda, custo de entrada, lucro e valores a receber.", style = MaterialTheme.typography.bodySmall)
+                    val ordersReportActive = activeOrders
+                    val ordersReportPending = ordersReportActive.count { it.status == "Pendente" }
+                    val ordersReportProduction = ordersReportActive.count { it.status == "Em produção" }
+                    val ordersReportDelivered = ordersReportActive.count { it.status == "Entregue" }
+                    val ordersReportOverdue = ordersReportActive.count { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+                    val ordersReportUnits = ordersReportActive.sumOf { it.quantity }
+                    val ordersReportSales = ordersReportActive.sumOf { it.totalValue }
+                    val ordersReportEntry = ordersReportActive.sumOf { it.quantity * it.unitCost }
+                    val ordersReportProfit = ordersReportSales - ordersReportEntry
+                    val ordersReportReceivable = ordersReportActive.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Encomendas: " + ordersReportActive.size + " • Unidades: " + ordersReportUnits)
+                            Text("Pendentes: $ordersReportPending • Em produção: $ordersReportProduction • Entregues: $ordersReportDelivered")
+                            Text("Atrasadas: $ordersReportOverdue")
+                            Text("Saída (venda): R$ %.2f".format(ordersReportSales))
+                            Text("Entrada (custo): R$ %.2f".format(ordersReportEntry))
+                            Text("Lucro bruto: R$ %.2f".format(ordersReportProfit))
+                            Text("A receber: R$ %.2f".format(ordersReportReceivable))
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = {
+                            val report = buildOrdersReportText(period, ordersReportActive)
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }, "Compartilhar relatório de encomendas").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }, modifier = Modifier.weight(1f)) { Text("Compartilhar") }
+                        OutlinedButton(onClick = {
+                            pendingPdfText = buildOrdersReportText(period, ordersReportActive)
+                            exportPdfLauncher.launch("controle-queijos-encomendas-relatorio.pdf")
+                        }, modifier = Modifier.weight(1f)) { Text("PDF") }
+                    }
+                    OutlinedButton(onClick = {
+                        pendingCsvText = buildOrdersReportCsv(period, ordersReportActive)
+                        exportCsvLauncher.launch("controle-queijos-encomendas-relatorio.csv")
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Exportar relatório de encomendas para Excel") }
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(onClick = {
@@ -1953,6 +1994,24 @@ private fun buildFinancialCsv(period: String, orders: List<Order>, payments: Lis
     }
 }
 
+private fun buildOrdersReportCsv(period: String, orders: List<Order>): String = buildString {
+    val active = orders.filter { it.status != "Cancelada" }
+    appendLine("CONTROLE QUEIJOS — RELATÓRIO DE ENCOMENDAS")
+    appendLine("Período;" + csvCell(period))
+    appendLine()
+    appendLine("Cliente;Produto;Quantidade;Venda;Entrada;Lucro bruto;Recebido;A receber;Status;Entrega")
+    active.sortedByDescending { it.orderDate }.forEach { order ->
+        val entry = order.quantity * order.unitCost
+        val profit = order.totalValue - entry
+        val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+        appendLine(listOf(
+            order.customerName, order.productName, order.quantity.toString(),
+            "%.2f".format(order.totalValue), "%.2f".format(entry), "%.2f".format(profit),
+            "%.2f".format(order.paidValue), "%.2f".format(balance), order.status, dateOnly(order.deliveryDate)
+        ).joinToString(";") { csvCell(it) })
+    }
+}
+
 private fun buildProductionCsv(period: String, orders: List<Order>): String {
     val active = orders.filter { it.status != "Entregue" && it.status != "Cancelada" }
     val summary = active.groupBy { normalizeSearch(it.productName) }.values
@@ -2046,6 +2105,67 @@ private fun buildFinancialReportText(
     appendLine("Em produção: " + production)
     appendLine("Entregas atrasadas: " + overdue)
     appendLine("Entregas previstas para hoje: " + dueToday)
+}
+
+private fun buildOrdersReportText(period: String, orders: List<Order>): String {
+    val active = orders.filter { it.status != "Cancelada" }
+    val pending = active.filter { it.status == "Pendente" }
+    val production = active.filter { it.status == "Em produção" }
+    val delivered = active.filter { it.status == "Entregue" }
+    val overdue = active.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+    val totalUnits = active.sumOf { it.quantity }
+    val deliveredUnits = delivered.sumOf { it.quantity }
+    val pendingUnits = active.filter { it.status != "Entregue" }.sumOf { it.quantity }
+    val salesTotal = active.sumOf { it.totalValue }
+    val entryTotal = active.sumOf { it.quantity * it.unitCost }
+    val grossProfit = salesTotal - entryTotal
+    val received = active.sumOf { it.paidValue }
+    val receivable = (salesTotal - received).coerceAtLeast(0.0)
+    val productSummary = active.groupBy { normalizeSearch(it.productName) }.values
+        .map { group ->
+            val name = group.first().productName.trim()
+            val units = group.sumOf { it.quantity }
+            val sales = group.sumOf { it.totalValue }
+            val entry = group.sumOf { it.quantity * it.unitCost }
+            Triple(name, units, sales - entry)
+        }
+        .sortedBy { normalizeSearch(it.first) }
+
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — RELATÓRIO DE ENCOMENDAS")
+        appendLine("Período: $period")
+        appendLine()
+        appendLine("Total de encomendas: " + active.size)
+        appendLine("Pendentes: " + pending.size)
+        appendLine("Em produção: " + production.size)
+        appendLine("Entregues: " + delivered.size)
+        appendLine("Atrasadas: " + overdue.size)
+        appendLine()
+        appendLine("Unidades totais: $totalUnits")
+        appendLine("Unidades pendentes de entrega: $pendingUnits")
+        appendLine("Unidades entregues: $deliveredUnits")
+        appendLine("Valor de saída (venda): R$ %.2f".format(salesTotal))
+        appendLine("Custo de entrada: R$ %.2f".format(entryTotal))
+        appendLine("Lucro bruto: R$ %.2f".format(grossProfit))
+        appendLine("Recebido: R$ %.2f".format(received))
+        appendLine("A receber: R$ %.2f".format(receivable))
+        appendLine()
+        appendLine("RESUMO POR PRODUTO")
+        if (productSummary.isEmpty()) appendLine("Nenhuma encomenda no período.")
+        else productSummary.forEach { (name, units, profit) ->
+            appendLine("• $name — $units un. — lucro bruto R$ %.2f".format(profit))
+        }
+        appendLine()
+        appendLine("DETALHAMENTO")
+        if (active.isEmpty()) appendLine("Nenhuma encomenda no período.")
+        else active.sortedByDescending { it.orderDate }.forEach { order ->
+            val entry = order.quantity * order.unitCost
+            val profit = order.totalValue - entry
+            val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+            appendLine("• ${order.customerName} — ${order.productName} — ${order.quantity} un.")
+            appendLine("  ${order.status} • entrega ${dateOnly(order.deliveryDate)} • venda R$ %.2f • entrada R$ %.2f • lucro R$ %.2f • a receber R$ %.2f".format(order.totalValue, entry, profit, balance))
+        }
+    }
 }
 
 private fun buildOperationalReportText(period: String, orders: List<Order>): String {
