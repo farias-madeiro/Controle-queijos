@@ -485,7 +485,9 @@ fun ControleQueijosApp(context: Context) {
                 Button(onClick = {
                     if (hasPin && hashPin(rolePinInput) == prefs.getString(PIN_HASH, "")) {
                         userRole = "Administrador"
+                        prefs.edit().putString(USER_ROLE, "Administrador").apply()
                         rolePinDialog = false
+                        userDialog = false
                         rolePinInput = ""
                         rolePinError = ""
                     } else if (!hasPin) {
