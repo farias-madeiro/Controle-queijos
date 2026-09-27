@@ -47,10 +47,11 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-Queijos-V7.11-release
+          name: Controle-Queijos-V7.12-release
           path: app/build/outputs/apk/release/app-release.apk
 
 # V7.19.1 — assinatura permanente para atualizações futuras
+# V7.12 — destaque do custo total de entrada das encomendas
 # V7.11 — relatório financeiro com entrada, saída e lucro das encomendas
 # V7.10 — prevenção de clientes duplicados
 # V7.8 — correção do artefato de distribuição
