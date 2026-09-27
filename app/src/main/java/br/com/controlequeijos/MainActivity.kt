@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.11 — relatório financeiro com entrada, saída e lucro das encomendas
+// V7.12 — destaque do custo total de entrada das encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -666,7 +666,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.11") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.12") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1001,6 +1001,16 @@ fun ControleQueijosApp(context: Context) {
                     Text("Lucro líquido: R$ %.2f".format(profit))
                     Text("Resultado de caixa: R$ %.2f".format(cashResult))
                     Text("Gastos: R$ %.2f".format(expenseTotal))
+                    Spacer(Modifier.height(6.dp))
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("🧀 CUSTO TOTAL DAS ENCOMENDAS", style = MaterialTheme.typography.titleMedium)
+                            Text("Entrada (custo): R$ %.2f".format(orderCost), style = MaterialTheme.typography.titleLarge)
+                            Text("Saída (venda): R$ %.2f".format(orderRevenue))
+                            Text("Lucro bruto das encomendas: R$ %.2f".format(orderGrossProfit))
+                            Text("Consideradas somente encomendas entregues no período selecionado.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     Text("Margem sobre vendas: %.2f%%".format(profitMargin))
                     Text("Recebimentos registrados: " + filteredPayments.size)
                     Text("Gastos lançados: " + filteredExpenses.size)
