@@ -51,3 +51,4 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
 
 # V7.19.1 — assinatura permanente para atualizações futuras
+# V7.8 — correção do artefato de distribuição
