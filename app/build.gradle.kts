@@ -13,8 +13,8 @@ android {
         targetSdk = 35
         versionCode = 1300
         versionName = "7.13"
-        buildConfigField("String", "SUPABASE_URL", ""https://vebrvocwgosaclbavqxf.supabase.co"")
-        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", ""sb_publishable_8XGCr-exfHkwcUu1DRm1RA_d8mT10Jf"")
+        buildConfigField("String", "SUPABASE_URL", "\"https://vebrvocwgosaclbavqxf.supabase.co\"")
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_8XGCr-exfHkwcUu1DRm1RA_d8mT10Jf\"")
     }
     buildFeatures { buildConfig = true }
     signingConfigs {
