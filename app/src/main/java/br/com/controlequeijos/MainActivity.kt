@@ -348,6 +348,8 @@ fun ControleQueijosApp(context: Context) {
     var clientSearch by remember { mutableStateOf("") }
     var clientFilter by remember { mutableStateOf("Todos") }
     var productSearch by remember { mutableStateOf("") }
+    var receivableSearch by remember { mutableStateOf("") }
+    var receivableFilter by remember { mutableStateOf("Todos") }
     var backupMessage by remember { mutableStateOf("") }
     var deleteMessage by remember { mutableStateOf("") }
     var pendingDeleteTitle by remember { mutableStateOf("") }
@@ -359,7 +361,7 @@ fun ControleQueijosApp(context: Context) {
     var selectedTab by remember { mutableStateOf(0) }
     var pendingPdfText by remember { mutableStateOf("") }
     var pendingCsvText by remember { mutableStateOf("") }
-    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização")
+    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização", "💳 A Receber")
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     var hasPin by remember { mutableStateOf(prefs.getString(PIN_HASH, null).orEmpty().isNotBlank()) }
     var isUnlocked by remember { mutableStateOf(!hasPin) }
@@ -1204,6 +1206,94 @@ fun ControleQueijosApp(context: Context) {
                 }
             }
         }
+
+    if (selectedTab == 8) item {
+        val openReceivables = orders.filter { it.status != "Cancelada" && (it.totalValue - it.paidValue) > 0.005 }
+        val normalizedReceivableSearch = normalizeSearch(receivableSearch)
+        val visibleReceivables = openReceivables
+            .filter { normalizedReceivableSearch.isBlank() || normalizeSearch(it.customerName).contains(normalizedReceivableSearch) || normalizeSearch(it.productName).contains(normalizedReceivableSearch) }
+            .filter {
+                when (receivableFilter) {
+                    "Atrasadas" -> it.status != "Entregue" && isOverdue(it.deliveryDate)
+                    "Entregues" -> it.status == "Entregue"
+                    "Pendentes" -> it.status != "Entregue"
+                    else -> true
+                }
+            }
+            .sortedWith(compareByDescending<Order> { it.status != "Entregue" && isOverdue(it.deliveryDate) }.thenBy { it.deliveryDate })
+
+        val totalReceivable = openReceivables.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+        val overdueReceivable = openReceivables.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+        val deliveredReceivable = openReceivables.filter { it.status == "Entregue" }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+        val receivableByClient = openReceivables.groupBy { normalizeSearch(it.customerName) }.map { (_, group) ->
+            group.first().customerName.trim() to group.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+        }.sortedByDescending { it.second }
+
+        Text("💳 Contas a Receber", style = MaterialTheme.typography.headlineSmall)
+        Text("Acompanhe saldos pendentes, atrasados e pagamentos dos clientes.", style = MaterialTheme.typography.bodySmall)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Total em aberto: R$ %.2f".format(totalReceivable), style = MaterialTheme.typography.titleLarge)
+                Text("Atrasado: R$ %.2f".format(overdueReceivable))
+                Text("Entregue e ainda não quitado: R$ %.2f".format(deliveredReceivable))
+                Text("Clientes com saldo: " + receivableByClient.size)
+            }
+        }
+        OutlinedTextField(
+            value = receivableSearch,
+            onValueChange = { receivableSearch = it },
+            label = { Text("Pesquisar cliente ou produto") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf("Todos", "Atrasadas", "Pendentes", "Entregues").forEach { filter ->
+                FilterChip(selected = receivableFilter == filter, onClick = { receivableFilter = filter }, label = { Text(filter) })
+            }
+        }
+        Text("Por cliente", style = MaterialTheme.typography.titleMedium)
+        if (receivableByClient.isEmpty()) Text("Nenhum cliente com saldo em aberto.") else receivableByClient.take(20).forEach { (name, balance) ->
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(name, modifier = Modifier.weight(1f))
+                    Text("R$ %.2f".format(balance), style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+        Text("Encomendas em aberto", style = MaterialTheme.typography.titleMedium)
+        if (visibleReceivables.isEmpty()) Text("Nenhuma encomenda encontrada.") else visibleReceivables.take(30).forEach { order ->
+            val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+            val overdue = order.status != "Entregue" && isOverdue(order.deliveryDate)
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(order.customerName, style = MaterialTheme.typography.titleMedium)
+                    Text(order.productName + " • " + order.quantity + " un.")
+                    Text("Total: R$ %.2f • Pago: R$ %.2f".format(order.totalValue, order.paidValue))
+                    Text("Saldo: R$ %.2f".format(balance) + if (overdue) " • ATRASADA" else " • " + order.status)
+                    Text("Entrega: " + dateOnly(order.deliveryDate))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(onClick = { paymentOrder = order }) { Text("Registrar pagamento") }
+                        OutlinedButton(onClick = {
+                            statementClient = clients.firstOrNull { it.id == order.customerId }
+                                ?: clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(order.customerName) }
+                        }) { Text("Extrato") }
+                    }
+                }
+            }
+        }
+        Text("Histórico recente de recebimentos", style = MaterialTheme.typography.titleMedium)
+        val recentPayments = payments.sortedByDescending { it.date }.take(10)
+        if (recentPayments.isEmpty()) Text("Nenhum recebimento registrado.") else recentPayments.forEach { payment ->
+            val order = orders.firstOrNull { it.id == payment.orderId }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp)) {
+                    Text("R$ %.2f".format(payment.amount), style = MaterialTheme.typography.titleMedium)
+                    Text(dateText(payment.date) + if (payment.note.isNotBlank()) " • " + payment.note else "")
+                    if (order != null) Text("Cliente: " + order.customerName)
+                }
+            }
+        }
+    }
 
     if (selectedTab == 6) item {            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
