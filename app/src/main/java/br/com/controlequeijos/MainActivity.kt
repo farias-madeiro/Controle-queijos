@@ -437,8 +437,14 @@ fun ControleQueijosApp(context: Context) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Defina o nome deste usuário e o nível de acesso do aparelho.")
                     OutlinedTextField(value = userName, onValueChange = { userName = it }, label = { Text("Nome") }, singleLine = true)
-                    Text("Perfil: $userRole")
-                    Text("Administrador: acesso completo. Operador: acesso às rotinas do dia a dia, sem configurações de segurança.", style = MaterialTheme.typography.bodySmall)
+                    Text("Perfil de acesso", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        if (userRole == "Administrador") Button(onClick = { userRole = "Administrador" }) { Text("Administrador") }
+                        else OutlinedButton(onClick = { userRole = "Administrador" }) { Text("Administrador") }
+                        if (userRole == "Operador") Button(onClick = { userRole = "Operador" }) { Text("Operador") }
+                        else OutlinedButton(onClick = { userRole = "Operador" }) { Text("Operador") }
+                    }
+                    Text("Administrador: acesso completo. Operador: rotinas do dia a dia, sem Backup e Sincronização.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
@@ -446,6 +452,7 @@ fun ControleQueijosApp(context: Context) {
                     val clean = userName.trim()
                     if (clean.isNotBlank()) {
                         userName = clean
+                        if (userRole == "Operador" && (selectedTab == 6 || selectedTab == 7)) selectedTab = 0
                         prefs.edit().putString(USER_NAME, clean).putString(USER_ROLE, userRole).apply()
                         userDialog = false
                     }
@@ -676,7 +683,7 @@ fun ControleQueijosApp(context: Context) {
                 item {
                     ScrollableTabRow(selectedTabIndex = selectedTab, modifier = Modifier.fillMaxWidth()) {
                         tabTitles.forEachIndexed { index, title ->
-                            Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
+                            Tab(enabled = userRole == "Administrador" || (index != 6 && index != 7), selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
                         }
                     }
                 }
@@ -1189,7 +1196,7 @@ fun ControleQueijosApp(context: Context) {
                         exportCsvLauncher.launch("controle-queijos-producao.csv")
                     }, modifier = Modifier.fillMaxWidth()) { Text("Produção consolidada") }
                 }
-                if (selectedTab == 7) item {
+                if (selectedTab == 7 && userRole == "Administrador") item {
             Text("☁️ Nuvem", style = MaterialTheme.typography.headlineSmall)
             Text("Use a mesma conta nos dois celulares para acessar os dados da empresa.", style = MaterialTheme.typography.bodySmall)
             Card(Modifier.fillMaxWidth()) {
@@ -1336,7 +1343,7 @@ fun ControleQueijosApp(context: Context) {
         }
     }
 
-    if (selectedTab == 6) item {            Card(Modifier.fillMaxWidth()) {
+    if (selectedTab == 6 && userRole == "Administrador") item {            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("✅ Versão estável V7.50", style = MaterialTheme.typography.titleMedium)
                     Text("Sistema revisado para uso diário: encomendas, entregas, produção, financeiro, clientes, relatórios, PDF, CSV, backup, sincronização e proteção por PIN.")
