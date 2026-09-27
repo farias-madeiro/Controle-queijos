@@ -51,6 +51,7 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
 
 # V7.14 — consolidação da próxima versão mantendo a base aprovada da V7.12
+# V7.14 — artefato de distribuição corrigido
 # V7.12 — destaque do custo total de entrada das encomendas
 # V7.11 — relatório financeiro com entrada, saída e lucro das encomendas
 # V7.10 — prevenção de clientes duplicados
