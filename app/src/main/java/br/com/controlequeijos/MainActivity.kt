@@ -228,7 +228,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.10")
+        put("appVersion", "V7.22")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -745,7 +745,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.17") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.22") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1092,13 +1092,35 @@ fun ControleQueijosApp(context: Context) {
                     Text("Resumo financeiro", style = MaterialTheme.typography.headlineSmall)
                     Text("Visão financeira detalhada no período selecionado.", style = MaterialTheme.typography.bodySmall)
                     val receivedTotal = filteredPayments.sumOf { it.amount }
-                    val cashResult = receivedTotal - expenseTotal
+                    val cashSalesReceived = saleRevenue
+                    val cashOrderReceived = receivedTotal
+                    val cashInflow = cashSalesReceived + cashOrderReceived
+                    val cashOutflow = expenseTotal
+                    val cashResult = cashInflow - cashOutflow
                     Text("Faturamento: R$ %.2f".format(saleRevenue + orderRevenue))
                     Text("Recebido no período: R$ %.2f".format(receivedTotal))
                     Text("A receber: R$ %.2f".format(ordersReceivable))
                     Text("Lucro líquido: R$ %.2f".format(profit))
                     Text("Resultado de caixa: R$ %.2f".format(cashResult))
                     Text("Gastos: R$ %.2f".format(expenseTotal))
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("💵 Fluxo de Caixa", style = MaterialTheme.typography.titleMedium)
+                            Text("Entradas recebidas: R$ %.2f".format(cashInflow))
+                            Text("  • Vendas diretas recebidas: R$ %.2f".format(cashSalesReceived))
+                            Text("  • Recebimentos de encomendas: R$ %.2f".format(cashOrderReceived))
+                            Text("Saídas / despesas pagas: R$ %.2f".format(cashOutflow))
+                            Text(
+                                "Saldo do período: R$ %.2f".format(cashResult),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Text(
+                                "O fluxo considera as vendas diretas e os recebimentos registrados no período, menos os gastos lançados.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
