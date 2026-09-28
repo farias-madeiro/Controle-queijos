@@ -735,7 +735,6 @@ fun ControleQueijosApp(context: Context) {
         (clientOrders.sumOf { it.totalValue } - clientOrders.sumOf { it.paidValue }).coerceAtLeast(0.0)
     }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
-    val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
     val directSalesRevenue = saleRevenue
     val deliveredOrdersRevenue = orderRevenue
     val clientReceivables = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }
