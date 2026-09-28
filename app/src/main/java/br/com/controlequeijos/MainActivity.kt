@@ -374,6 +374,7 @@ fun ControleQueijosApp(context: Context) {
     var rolePinDialog by remember { mutableStateOf(false) }
     var rolePinInput by remember { mutableStateOf("") }
     var rolePinError by remember { mutableStateOf("") }
+    var pendingProtectedTab by remember { mutableStateOf<Int?>(null) }
     var cloudDialog by remember { mutableStateOf(false) }
     var cloudEmail by remember { mutableStateOf("") }
     var cloudPassword by remember { mutableStateOf("") }
@@ -443,7 +444,7 @@ fun ControleQueijosApp(context: Context) {
                     Text("Perfil de acesso", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         if (userRole == "Administrador") Button(onClick = { userRole = "Administrador" }) { Text("Administrador") }
-                        else OutlinedButton(onClick = { rolePinInput = ""; rolePinError = ""; rolePinDialog = true }) { Text("Administrador") }
+                        else OutlinedButton(onClick = { rolePinInput = ""; rolePinError = ""; pendingProtectedTab = null; rolePinDialog = true }) { Text("Administrador") }
                         if (userRole == "Operador") Button(onClick = { userRole = "Operador" }) { Text("Operador") }
                         else OutlinedButton(onClick = { userRole = "Operador" }) { Text("Operador") }
                     }
@@ -486,6 +487,8 @@ fun ControleQueijosApp(context: Context) {
                     if (hasPin && hashPin(rolePinInput) == prefs.getString(PIN_HASH, "")) {
                         userRole = "Administrador"
                         prefs.edit().putString(USER_ROLE, "Administrador").apply()
+                        pendingProtectedTab?.let { selectedTab = it }
+                        pendingProtectedTab = null
                         rolePinDialog = false
                         userDialog = false
                         rolePinInput = ""
@@ -725,7 +728,23 @@ fun ControleQueijosApp(context: Context) {
                 item {
                     ScrollableTabRow(selectedTabIndex = selectedTab, modifier = Modifier.fillMaxWidth()) {
                         tabTitles.forEachIndexed { index, title ->
-                            Tab(enabled = userRole == "Administrador" || (index != 6 && index != 7), selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
+                            val protected = index == 6 || index == 7
+                            val displayTitle = if (protected && userRole != "Administrador") "🔒 " + title else title
+                            Tab(
+                                enabled = true,
+                                selected = selectedTab == index,
+                                onClick = {
+                                    if (protected && userRole != "Administrador") {
+                                        rolePinInput = ""
+                                        rolePinError = ""
+                                        pendingProtectedTab = index
+                                        rolePinDialog = true
+                                    } else {
+                                        selectedTab = index
+                                    }
+                                },
+                                text = { Text(displayTitle) }
+                            )
                         }
                     }
                 }
