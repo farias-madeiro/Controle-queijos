@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.24 — gestão aprimorada de produtos
+// V7.25 — gestão aprimorada de encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -228,7 +228,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.24")
+        put("appVersion", "V7.25")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -752,7 +752,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.24") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.25") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1740,6 +1740,8 @@ if (selectedTab == 2) item {
                             Text("📅 Agenda de entregas", style = MaterialTheme.typography.titleMedium)
                             Text("Hoje: $todayCount • Amanhã: $tomorrowCount • Próximos 7 dias: $nextSevenCount")
                             Text("Atrasadas: $overdueCount • Unidades pendentes de entrega: $pendingUnits")
+                            Text("Total de encomendas ativas: " + activeOrders.size + " • Valor: R$ %.2f".format(activeOrders.sumOf { it.totalValue }))
+                            Text("Recebido: R$ %.2f • A receber: R$ %.2f".format(activeOrders.sumOf { it.paidValue }, activeOrders.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }))
                         }
                     }
                     OutlinedTextField(
@@ -2650,12 +2652,20 @@ private fun OrderDialog(product: Product, order: Order?, clients: List<Client>, 
             Button(onClick = {
                 val q = quantity.toIntOrNull() ?: 0
                 val p = paid.toDoubleOrNull() ?: 0.0
+                val deliveryDate = parseDate(delivery, defaultDeliveryDate())
+                val referenceDate = order?.orderDate ?: System.currentTimeMillis()
                 if (customer.isBlank()) {
                     validationError = "Informe o nome do cliente."
                 } else if (q <= 0) {
                     validationError = "Informe uma quantidade válida."
+                } else if (p < 0.0) {
+                    validationError = "O valor pago não pode ser negativo."
+                } else if (p > (order?.totalValue ?: (q * product.exitValue)) + 0.005) {
+                    validationError = "O valor pago não pode ser maior que o total da encomenda."
+                } else if (deliveryDate < referenceDate - 24L * 60L * 60L * 1000L) {
+                    validationError = "A data de entrega não pode ser anterior à data da encomenda."
                 } else {
-                    onSave(customer.trim(), q, parseDate(delivery, defaultDeliveryDate()), p)
+                    onSave(customer.trim(), q, deliveryDate, p)
                 }
             }) { Text("Salvar") }
         },
