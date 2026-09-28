@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.23 — gestão aprimorada de clientes
+// V7.24 — gestão aprimorada de produtos
 
 import android.content.Context
 import android.os.Bundle
@@ -228,7 +228,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.23")
+        put("appVersion", "V7.24")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -371,6 +371,7 @@ fun ControleQueijosApp(context: Context) {
     var clientSearch by remember { mutableStateOf("") }
     var clientFilter by remember { mutableStateOf("Todos") }
     var productSearch by remember { mutableStateOf("") }
+    var productSort by remember { mutableStateOf("Nome") }
     var receivableSearch by remember { mutableStateOf("") }
     var receivableFilter by remember { mutableStateOf("Todos") }
     var backupMessage by remember { mutableStateOf("") }
@@ -751,7 +752,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.23") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.24") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1539,8 +1540,21 @@ fun ControleQueijosApp(context: Context) {
                     Text("Produtos / Catálogo", style = MaterialTheme.typography.headlineSmall)
                     Text("O estoque é opcional. O foco continua sendo vendas e encomendas.", style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(value = productSearch, onValueChange = { productSearch = it }, label = { Text("Buscar produto") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("Nome", "Mais vendidos", "Mais encomendados", "Maior margem").forEach { sort ->
+                            if (productSort == sort) Button(onClick = { productSort = sort }) { Text(sort) }
+                            else OutlinedButton(onClick = { productSort = sort }) { Text(sort) }
+                        }
+                    }
                 }
-                val visibleProducts = products.filter { normalizeSearch(it.name).contains(normalizeSearch(productSearch)) }
+                val visibleProducts = products.filter { normalizeSearch(it.name).contains(normalizeSearch(productSearch)) }.let { list ->
+        when (productSort) {
+            "Mais vendidos" -> list.sortedByDescending { p -> sales.filter { it.productId == p.id }.sumOf { it.quantity } }
+            "Mais encomendados" -> list.sortedByDescending { p -> orders.filter { it.productId == p.id && it.status != "Cancelada" }.sumOf { it.quantity } }
+            "Maior margem" -> list.sortedByDescending { p -> if (p.exitValue > 0.0) (p.exitValue - p.entryValue) / p.exitValue else 0.0 }
+            else -> list.sortedBy { normalizeSearch(it.name) }
+        }
+    }
                 if (selectedTab == 2) item {
                     val productsWithStock = products.count { it.quantity > 0 }
                     val lowStock = products.count { it.quantity in 1..5 }
@@ -1548,6 +1562,13 @@ fun ControleQueijosApp(context: Context) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("📊 Resumo dos produtos", style = MaterialTheme.typography.titleMedium)
                             Text("Cadastrados: " + products.size + " • Com quantidade informada: " + productsWithStock + " • Estoque baixo: " + lowStock)
+                            val totalOrderedUnits = products.sumOf { product ->
+                                orders.filter { it.productId == product.id && it.status != "Cancelada" }.sumOf { it.quantity }
+                            }
+                            val totalSoldUnits = products.sumOf { product ->
+                                sales.filter { it.productId == product.id }.sumOf { it.quantity }
+                            }
+                            Text("Encomendado: $totalOrderedUnits un. • Vendido: $totalSoldUnits un.")
                         }
                     }
                 }
@@ -1570,6 +1591,14 @@ fun ControleQueijosApp(context: Context) {
                             Text("Lucro por unidade: R$ %.2f".format(p.exitValue - p.entryValue))
                             val margin = if (p.exitValue > 0.0) ((p.exitValue - p.entryValue) / p.exitValue) * 100.0 else 0.0
                             Text("Margem sobre a venda: %.1f%%".format(margin))
+                            val soldUnits = sales.filter { it.productId == p.id }.sumOf { it.quantity }
+                            val orderedUnits = orders.filter { it.productId == p.id && it.status != "Cancelada" }.sumOf { it.quantity }
+                            val deliveredUnits = orders.filter { it.productId == p.id && it.status == "Entregue" }.sumOf { it.quantity }
+                            val productSalesRevenue = sales.filter { it.productId == p.id }.sumOf { it.quantity * it.unitValue }
+                            val productOrderRevenue = orders.filter { it.productId == p.id && it.status == "Entregue" }.sumOf { it.totalValue }
+                            val productRevenue = productSalesRevenue + productOrderRevenue
+                            Text("Vendido: $soldUnits un. • Encomendado: $orderedUnits un. • Entregue: $deliveredUnits un.")
+                            Text("Faturamento gerado: R$ %.2f".format(productRevenue))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { saleDialogProduct = p }) { Text("Registrar venda") }
                                 OutlinedButton(onClick = { orderDialogProduct = p }) { Text("Encomenda") }
@@ -1866,7 +1895,7 @@ if (selectedTab == 2) item {
         }
     }
 
-    if (productDialog) ProductDialog(editingProduct, { productDialog = false }) { name, q, entry, exit ->
+    if (productDialog) ProductDialog(editingProduct, products, { productDialog = false }) { name, q, entry, exit ->
         val e = editingProduct
         val updated = if (e == null) products + Product(System.currentTimeMillis(), name, q, entry, exit)
         else products.map { if (it.id == e.id) e.copy(name = name, quantity = q, entryValue = entry, exitValue = exit) else it }
@@ -2496,29 +2525,43 @@ private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double, 
 }
 
 @Composable
-private fun ProductDialog(product: Product?, onDismiss: () -> Unit, onSave: (String, Int, Double, Double) -> Unit) {
+private fun ProductDialog(product: Product?, products: List<Product>, onDismiss: () -> Unit, onSave: (String, Int, Double, Double) -> Unit) {
     var name by remember(product) { mutableStateOf(product?.name ?: "") }
     var quantity by remember(product) { mutableStateOf(product?.quantity?.toString() ?: "0") }
     var entry by remember(product) { mutableStateOf(product?.entryValue?.toString() ?: "0") }
     var exit by remember(product) { mutableStateOf(product?.exitValue?.toString() ?: "0") }
+    var validationError by remember(product) { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (product == null) "Cadastrar produto" else "Editar produto") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Nome") }, singleLine = true)
+                OutlinedTextField(name, { name = it; validationError = "" }, label = { Text("Nome") }, singleLine = true)
                 OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade disponível (opcional)") }, singleLine = true)
                 Text("Para produtos sob encomenda, você pode deixar 0 e usar apenas custo e preço de venda.")
                 OutlinedTextField(entry, { entry = it.replace(",", ".") }, label = { Text("Valor de entrada (custo/unidade)") }, singleLine = true)
-                OutlinedTextField(exit, { exit = it.replace(",", ".") }, label = { Text("Valor de saída (venda/unidade)") }, singleLine = true)
+                OutlinedTextField(exit, { exit = it.replace(",", "."); validationError = "" }, label = { Text("Valor de saída (venda/unidade)") }, singleLine = true)
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
             Button(onClick = {
+                val cleanName = name.trim()
                 val q = quantity.toIntOrNull() ?: 0
                 val e = entry.toDoubleOrNull() ?: 0.0
                 val s = exit.toDoubleOrNull() ?: 0.0
-                if (name.isNotBlank()) onSave(name.trim(), q, e, s)
+                val duplicate = products.any { it.id != product?.id && normalizeSearch(it.name) == normalizeSearch(cleanName) }
+                when {
+                    cleanName.isBlank() -> validationError = "Informe o nome do produto."
+                    duplicate -> validationError = "Já existe um produto cadastrado com esse nome."
+                    q < 0 -> validationError = "A quantidade não pode ser negativa."
+                    e < 0.0 -> validationError = "O valor de entrada não pode ser negativo."
+                    s <= 0.0 -> validationError = "Informe um valor de saída maior que zero."
+                    s < e -> validationError = "O valor de saída não pode ser menor que o custo de entrada."
+                    else -> onSave(cleanName, q, e, s)
+                }
             }) { Text("Salvar") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
