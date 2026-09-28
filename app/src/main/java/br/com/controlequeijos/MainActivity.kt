@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.12 — destaque do custo total de entrada das encomendas
+// V7.23 — gestão aprimorada de clientes
 
 import android.content.Context
 import android.os.Bundle
@@ -228,7 +228,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.22")
+        put("appVersion", "V7.23")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -732,7 +732,13 @@ fun ControleQueijosApp(context: Context) {
                 (it.customerId == client.id ||
                     (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name)))
         }
-        (clientOrders.sumOf { it.totalValue } - clientOrders.sumOf { it.paidValue }).coerceAtLeast(0.0)
+        val total = clientOrders.sumOf { it.totalValue }
+        val registeredReceived = clientOrders.sumOf { order ->
+            payments.filter { it.orderId == order.id }.sumOf { it.amount }
+        }
+        val legacyPaid = clientOrders.sumOf { it.paidValue }
+        val received = if (registeredReceived > 0.005) registeredReceived else legacyPaid
+        (total - received).coerceAtLeast(0.0)
     }
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val directSalesRevenue = saleRevenue
@@ -745,7 +751,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.22") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.23") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1650,6 +1656,8 @@ fun ControleQueijosApp(context: Context) {
                             Text("Recebido: R$ %.2f".format(received))
                             Text("Saldo em aberto: R$ %.2f".format(balance), color = if (balance > 0.005) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             Text("Encomendas: " + clientOrders.size + " • Pendentes: " + pendingOrders)
+                            val averageClientOrder = if (clientOrders.isNotEmpty()) total / clientOrders.size else 0.0
+                            Text("Ticket médio: R$ %.2f".format(averageClientOrder))
                             if (lastOrder != null) Text("Última encomenda: " + dateOnly(lastOrder.orderDate) + " • " + lastOrder.productName + " • " + lastOrder.quantity + " un.")
                             if (clientPaymentHistory.isNotEmpty()) {
                                 Text("Últimos recebimentos", style = MaterialTheme.typography.labelLarge)
