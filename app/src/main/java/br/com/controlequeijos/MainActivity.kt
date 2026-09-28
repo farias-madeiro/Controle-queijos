@@ -666,6 +666,9 @@ fun ControleQueijosApp(context: Context) {
     val cost = saleCost + orderCost
     val expenseTotal = filteredExpenses.sumOf { it.value }
     val profit = revenue - cost - expenseTotal
+    val entryCostTotal = cost
+    val grossProfit = revenue - cost
+    val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
     val ordersTotal = activeOrders.sumOf { it.totalValue }
     val ordersPaid = activeOrders.sumOf { it.paidValue }
     val ordersReceivable = ordersTotal - ordersPaid
@@ -784,6 +787,9 @@ fun ControleQueijosApp(context: Context) {
                             Text("Recebido no período: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
                             Text("A receber: R$ %.2f".format(ordersReceivable))
                             Text("Gastos: R$ %.2f".format(expenseTotal))
+                            Text("Custo total de entrada: R$ %.2f".format(entryCostTotal))
+                            Text("Lucro bruto: R$ %.2f".format(grossProfit))
+                            Text("Margem líquida: %.2f%%".format(profitMargin))
                         }
                     }
 
@@ -1104,7 +1110,17 @@ fun ControleQueijosApp(context: Context) {
                             Text("Consideradas somente encomendas entregues no período selecionado.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    Text("Margem sobre vendas: %.2f%%".format(profitMargin))
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("📊 Indicadores do período", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento: R$ %.2f".format(revenue))
+                            Text("Custo de entrada: R$ %.2f".format(entryCostTotal))
+                            Text("Lucro bruto: R$ %.2f".format(grossProfit))
+                            Text("Despesas: R$ %.2f".format(expenseTotal))
+                            Text("Lucro líquido: R$ %.2f".format(profit))
+                            Text("Margem líquida: %.2f%%".format(profitMargin))
+                        }
+                    }
                     Text("Recebimentos registrados: " + filteredPayments.size)
                     Text("Gastos lançados: " + filteredExpenses.size)
                     Text("Encomendas canceladas: " + filteredOrders.count { it.status == "Cancelada" })
