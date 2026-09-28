@@ -284,6 +284,29 @@ private fun restoreBackupJson(context: Context, text: String): Result<Unit> = ru
         .apply()
 }
 
+private fun buildBackupSummary(text: String): String = runCatching {
+    val root = JSONObject(text)
+    val createdAt = root.optLong("createdAt", 0L)
+    val data = root.getJSONObject("data")
+    val counts = data.optJSONObject("counts")
+    val products = counts?.optInt("products", data.optJSONArray("products")?.length() ?: 0) ?: 0
+    val sales = counts?.optInt("sales", data.optJSONArray("sales")?.length() ?: 0) ?: 0
+    val expenses = counts?.optInt("expenses", data.optJSONArray("expenses")?.length() ?: 0) ?: 0
+    val orders = counts?.optInt("orders", data.optJSONArray("orders")?.length() ?: 0) ?: 0
+    val clients = counts?.optInt("clients", data.optJSONArray("clients")?.length() ?: 0) ?: 0
+    val payments = counts?.optInt("payments", data.optJSONArray("payments")?.length() ?: 0) ?: 0
+    buildString {
+        appendLine("O backup contém:")
+        appendLine("• $clients cliente(s)")
+        appendLine("• $products produto(s)")
+        appendLine("• $orders encomenda(s)")
+        appendLine("• $sales venda(s)")
+        appendLine("• $expenses gasto(s)")
+        appendLine("• $payments recebimento(s)")
+        if (createdAt > 0L) appendLine("Criado em: ${dateText(createdAt)}")
+    }
+}.getOrDefault("Não foi possível ler o resumo deste backup.")
+
 private fun normalizeSearch(text: String): String = Normalizer.normalize(text.trim(), Normalizer.Form.NFD).replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").lowercase(Locale.getDefault())
 private fun normalizePhone(text: String): String = text.filter(Char::isDigit)
 
@@ -1847,7 +1870,13 @@ if (selectedTab == 2) item {
         AlertDialog(
             onDismissRequest = { restoreConfirmation = false; pendingRestoreText = null },
             title = { Text("Confirmar restauração") },
-            text = { Text("Os dados atuais serão substituídos pelos dados do backup. Antes disso, o aplicativo salvará automaticamente um backup de segurança para permitir desfazer esta restauração.") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Os dados atuais serão substituídos pelos dados do backup.")
+                    Text(buildBackupSummary(pendingRestoreText!!))
+                    Text("Antes da restauração, o aplicativo salvará automaticamente um backup de segurança. Se cancelar, os dados atuais permanecerão intactos.")
+                }
+            },
             confirmButton = {
                 Button(onClick = {
                     val text = pendingRestoreText
