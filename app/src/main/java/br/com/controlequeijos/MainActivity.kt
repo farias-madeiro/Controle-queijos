@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.29 — relatórios financeiros e fluxo de caixa aprimorados
+// V7.30 — fluxo de caixa e recebimentos por data
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.29")
+        put("appVersion", "V7.30")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -762,18 +762,19 @@ fun ControleQueijosApp(context: Context) {
     }
     val receivableFuture = (ordersReceivable - receivableOverdue).coerceAtLeast(0.0)
     val directSalesReceived = filteredSales.sumOf { it.quantity * it.unitValue }
-    val orderReceivedInPeriod = filteredPayments.filter { payment ->
-        orders.any { it.id == payment.orderId && inPeriod(it.orderDate, period) }
-    }.sumOf { it.amount }
+    // Recebimentos entram no caixa pela data do pagamento, mesmo quando a encomenda é antiga.
+    val orderReceivedInPeriod = filteredPayments.sumOf { it.amount }
     val totalCashIn = directSalesReceived + orderReceivedInPeriod
     val totalCashOut = filteredExpenses.sumOf { it.value }
     val cashBalance = totalCashIn - totalCashOut
     val paymentCountInPeriod = filteredPayments.count()
     val receivedAverage = if (paymentCountInPeriod > 0) orderReceivedInPeriod / paymentCountInPeriod else 0.0
+    val paymentsByDate = filteredPayments.sortedByDescending { it.date }
+    val cashInBySource = orderReceivedInPeriod + directSalesReceived
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.29") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.30") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -821,6 +822,7 @@ fun ControleQueijosApp(context: Context) {
                             Text("A receber futuro: R$ %.2f".format(receivableFuture))
                     Text("Recebimentos no período: R$ %.2f".format(orderReceivedInPeriod))
                     Text("Saldo de caixa: R$ %.2f".format(cashBalance))
+        Text("Recebimentos registrados: $paymentCountInPeriod • Média: R$ %.2f".format(receivedAverage))
                         }
                     }
 
