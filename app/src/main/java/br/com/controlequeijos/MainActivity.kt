@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.26 — gestão aprimorada de recebimentos e saldos
+// V7.27 — relatórios e saldos financeiros aprimorados
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.26")
+        put("appVersion", "V7.27")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -722,7 +722,7 @@ fun ControleQueijosApp(context: Context) {
                 (it.customerId == client.id ||
                     (it.customerId == 0L && normalizeSearch(it.customerName) == normalizeSearch(client.name)))
         }
-        val balance = (clientOrders.sumOf { it.totalValue } - clientOrders.sumOf { it.paidValue }).coerceAtLeast(0.0)
+        val balance = (clientOrders.sumOf { it.totalValue } - clientOrders.sumOf { effectivePaid(it, payments) }).coerceAtLeast(0.0)
         val matchesFilter = when (clientFilter) {
             "Com saldo" -> balance > 0.005
             "Sem saldo" -> balance <= 0.005
@@ -750,7 +750,7 @@ fun ControleQueijosApp(context: Context) {
     val averageSale = if (filteredSales.isNotEmpty()) saleRevenue / filteredSales.sumOf { it.quantity } else 0.0
     val directSalesRevenue = saleRevenue
     val deliveredOrdersRevenue = orderRevenue
-    val clientReceivables = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }
+    val clientReceivables = activeOrders.filter { (it.totalValue - effectivePaid(it, payments)) > 0.005 }
         .groupBy { normalizeSearch(it.customerName) }
         .map { (_, group) -> group.first().customerName.trim() to (group.sumOf { it.totalValue } - group.sumOf { effectivePaid(it, payments) }).coerceAtLeast(0.0) }
         .sortedByDescending { it.second }
@@ -758,7 +758,7 @@ fun ControleQueijosApp(context: Context) {
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.26") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.27") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -976,7 +976,7 @@ fun ControleQueijosApp(context: Context) {
                                     Text(order.productName + " • " + order.quantity + " un.")
                                     Text("Entrega: " + dateOnly(order.deliveryDate))
                                     Text("Status: " + order.status)
-                                    Text("Total: R$ %.2f • Pago: R$ %.2f".format(order.totalValue, order.paidValue))
+                                    Text("Total: R$ %.2f • Pago: R$ %.2f".format(order.totalValue, effectivePaid(order, payments)))
                                     if (overdue) Text("ENTREGA ATRASADA", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         if (order.status == "Pendente") {
@@ -1233,7 +1233,7 @@ fun ControleQueijosApp(context: Context) {
                     val ordersReportSales = ordersReportActive.sumOf { it.totalValue }
                     val ordersReportEntry = ordersReportActive.sumOf { it.quantity * it.unitCost }
                     val ordersReportProfit = ordersReportSales - ordersReportEntry
-                    val ordersReportReceivable = ordersReportActive.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+                    val ordersReportReceivable = ordersReportActive.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Encomendas: " + ordersReportActive.size + " • Unidades: " + ordersReportUnits)
@@ -1390,7 +1390,7 @@ fun ControleQueijosApp(context: Context) {
         }
 
     if (selectedTab == 8) item {
-        val openReceivables = orders.filter { it.status != "Cancelada" && (it.totalValue - it.paidValue) > 0.005 }
+        val openReceivables = orders.filter { it.status != "Cancelada" && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
         val normalizedReceivableSearch = normalizeSearch(receivableSearch)
         val visibleReceivables = openReceivables
             .filter { normalizedReceivableSearch.isBlank() || normalizeSearch(it.customerName).contains(normalizedReceivableSearch) || normalizeSearch(it.productName).contains(normalizedReceivableSearch) }
@@ -1444,7 +1444,7 @@ fun ControleQueijosApp(context: Context) {
         }
         Text("Encomendas em aberto", style = MaterialTheme.typography.titleMedium)
         if (visibleReceivables.isEmpty()) Text("Nenhuma encomenda encontrada.") else visibleReceivables.take(30).forEach { order ->
-            val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+            val balance = (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0)
             val overdue = order.status != "Entregue" && isOverdue(order.deliveryDate)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2524,7 +2524,7 @@ private fun ClientDialog(
 private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
     var value by remember(order) { mutableStateOf("") }
     var note by remember(order) { mutableStateOf("") }
-    val remaining = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+    val remaining = (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Registrar pagamento") },
