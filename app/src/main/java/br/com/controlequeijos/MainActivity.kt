@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.25 — gestão aprimorada de encomendas
+// V7.26 — gestão aprimorada de recebimentos e saldos
 
 import android.content.Context
 import android.os.Bundle
@@ -223,12 +223,18 @@ fun saveOrders(context: Context, orders: List<Order>) {
 }
 
 
+
+private fun effectivePaid(order: Order, payments: List<Payment>): Double {
+    val linked = payments.filter { it.orderId == order.id }.sumOf { it.amount }
+    return if (linked > 0.005) linked.coerceIn(0.0, order.totalValue) else order.paidValue.coerceIn(0.0, order.totalValue)
+}
+
 private fun buildBackupJson(context: Context): String {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.25")
+        put("appVersion", "V7.26")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -671,8 +677,8 @@ fun ControleQueijosApp(context: Context) {
     val grossProfit = revenue - cost
     val profitMargin = if (revenue > 0.0) (profit / revenue) * 100.0 else 0.0
     val ordersTotal = activeOrders.sumOf { it.totalValue }
-    val ordersPaid = activeOrders.sumOf { it.paidValue }
-    val ordersReceivable = ordersTotal - ordersPaid
+    val ordersPaid = activeOrders.sumOf { effectivePaid(it, payments) }
+    val ordersReceivable = (ordersTotal - ordersPaid).coerceAtLeast(0.0)
     val pendingOrders = activeOrders.filter { it.status == "Pendente" }
     val overdueOrders = activeOrders.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
@@ -705,7 +711,7 @@ fun ControleQueijosApp(context: Context) {
         "Atrasadas" to filteredOrders.count { it.status != "Entregue" && it.status != "Cancelada" && isOverdue(it.deliveryDate) }
     )
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
-    val clientsWithBalance = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
+    val clientsWithBalance = activeOrders.filter { (it.totalValue - effectivePaid(it, payments)) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
     val searchText = normalizeSearch(clientSearch)
     val phoneSearch = normalizePhone(clientSearch)
     val migratedOrders = orders.map { o -> if (o.customerId != 0L) o else clients.firstOrNull { normalizeSearch(it.name) == normalizeSearch(o.customerName) }?.let { o.copy(customerId = it.id) } ?: o }
@@ -746,13 +752,13 @@ fun ControleQueijosApp(context: Context) {
     val deliveredOrdersRevenue = orderRevenue
     val clientReceivables = activeOrders.filter { (it.totalValue - it.paidValue) > 0.005 }
         .groupBy { normalizeSearch(it.customerName) }
-        .map { (_, group) -> group.first().customerName.trim() to (group.sumOf { it.totalValue } - group.sumOf { it.paidValue }).coerceAtLeast(0.0) }
+        .map { (_, group) -> group.first().customerName.trim() to (group.sumOf { it.totalValue } - group.sumOf { effectivePaid(it, payments) }).coerceAtLeast(0.0) }
         .sortedByDescending { it.second }
     val averageOrderTicket = if (deliveredOrders.isNotEmpty()) deliveredOrdersRevenue / deliveredOrders.size else 0.0
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.25") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.26") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1741,7 +1747,7 @@ if (selectedTab == 2) item {
                             Text("Hoje: $todayCount • Amanhã: $tomorrowCount • Próximos 7 dias: $nextSevenCount")
                             Text("Atrasadas: $overdueCount • Unidades pendentes de entrega: $pendingUnits")
                             Text("Total de encomendas ativas: " + activeOrders.size + " • Valor: R$ %.2f".format(activeOrders.sumOf { it.totalValue }))
-                            Text("Recebido: R$ %.2f • A receber: R$ %.2f".format(activeOrders.sumOf { it.paidValue }, activeOrders.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }))
+                            Text("Recebido: R$ %.2f • A receber: R$ %.2f".format(activeOrders.sumOf { effectivePaid(it, payments) }, activeOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
                         }
                     }
                     OutlinedTextField(
@@ -1889,8 +1895,9 @@ if (selectedTab == 2) item {
 
     paymentOrder?.let { o ->
         PaymentDialog(o, { paymentOrder = null }) { amount, note ->
-            val remaining = (o.totalValue - o.paidValue).coerceAtLeast(0.0)
-            val newPaid = (o.paidValue + amount).coerceAtMost(o.totalValue)
+            val currentPaid = effectivePaid(o, payments)
+            val remaining = (o.totalValue - currentPaid).coerceAtLeast(0.0)
+            val newPaid = (currentPaid + amount).coerceAtMost(o.totalValue)
             persistOrders(orders.map { if (it.id == o.id) o.copy(paidValue = newPaid) else it })
             persistPayments(payments + Payment(System.currentTimeMillis(), o.id, amount, System.currentTimeMillis(), note))
             paymentOrder = null
@@ -1936,6 +1943,19 @@ if (selectedTab == 2) item {
                     paidValue = paid.coerceIn(0.0, if (o.stockApplied) o.totalValue else total),
                     deliveryDate = delivery
                 ) else it
+            }
+            val edited = updated.firstOrNull { it.id == o.id }
+            if (edited != null) {
+                val currentLinked = payments.filter { it.orderId == o.id }
+                val newPaid = edited.paidValue.coerceIn(0.0, edited.totalValue)
+                val linkedTotal = currentLinked.sumOf { it.amount }
+                if (kotlin.math.abs(linkedTotal - newPaid) > 0.005) {
+                    val withoutOld = payments.filterNot { it.orderId == o.id }
+                    val replacement = if (newPaid > 0.005) {
+                        withoutOld + Payment(System.currentTimeMillis(), o.id, newPaid, System.currentTimeMillis(), "Ajuste de pagamento")
+                    } else withoutOld
+                    persistPayments(replacement)
+                }
             }
             persistOrders(updated)
             editingOrder = null
