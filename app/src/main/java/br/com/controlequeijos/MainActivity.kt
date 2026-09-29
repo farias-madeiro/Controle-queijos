@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.28 — contas a receber e indicadores financeiros
+// V7.29 — relatórios financeiros e fluxo de caixa aprimorados
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.28")
+        put("appVersion", "V7.29")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -761,10 +761,19 @@ fun ControleQueijosApp(context: Context) {
             .sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
     }
     val receivableFuture = (ordersReceivable - receivableOverdue).coerceAtLeast(0.0)
+    val directSalesReceived = filteredSales.sumOf { it.quantity * it.unitValue }
+    val orderReceivedInPeriod = filteredPayments.filter { payment ->
+        orders.any { it.id == payment.orderId && inPeriod(it.orderDate, period) }
+    }.sumOf { it.amount }
+    val totalCashIn = directSalesReceived + orderReceivedInPeriod
+    val totalCashOut = filteredExpenses.sumOf { it.value }
+    val cashBalance = totalCashIn - totalCashOut
+    val paymentCountInPeriod = filteredPayments.count()
+    val receivedAverage = if (paymentCountInPeriod > 0) orderReceivedInPeriod / paymentCountInPeriod else 0.0
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.28") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.29") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -810,6 +819,8 @@ fun ControleQueijosApp(context: Context) {
                             Text("Margem líquida: %.2f%%".format(profitMargin))
                             Text("A receber em atraso: R$ %.2f".format(receivableOverdue))
                             Text("A receber futuro: R$ %.2f".format(receivableFuture))
+                    Text("Recebimentos no período: R$ %.2f".format(orderReceivedInPeriod))
+                    Text("Saldo de caixa: R$ %.2f".format(cashBalance))
                         }
                     }
 
