@@ -1894,7 +1894,7 @@ if (selectedTab == 2) item {
     }
 
     paymentOrder?.let { o ->
-        PaymentDialog(o, { paymentOrder = null }) { amount, note ->
+        PaymentDialog(o, payments, { paymentOrder = null }) { amount, note ->
             val currentPaid = effectivePaid(o, payments)
             val remaining = (o.totalValue - currentPaid).coerceAtLeast(0.0)
             val newPaid = (currentPaid + amount).coerceAtMost(o.totalValue)
@@ -2521,7 +2521,7 @@ private fun ClientDialog(
 }
 
 @Composable
-private fun PaymentDialog(order: Order, onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
+private fun PaymentDialog(order: Order, payments: List<Payment>, onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
     var value by remember(order) { mutableStateOf("") }
     var note by remember(order) { mutableStateOf("") }
     val remaining = (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0)
