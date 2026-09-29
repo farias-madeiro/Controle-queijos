@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.27 — relatórios e saldos financeiros aprimorados
+// V7.28 — contas a receber e indicadores financeiros
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.27")
+        put("appVersion", "V7.28")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -756,9 +756,15 @@ fun ControleQueijosApp(context: Context) {
         .sortedByDescending { it.second }
     val averageOrderTicket = if (deliveredOrders.isNotEmpty()) deliveredOrdersRevenue / deliveredOrders.size else 0.0
     val averageDirectSaleTicket = if (filteredSales.isNotEmpty()) directSalesRevenue / filteredSales.size else 0.0
+    val receivableOverdue = clientReceivables.sumOf { (customer, _) ->
+        activeOrders.filter { normalizeSearch(it.customerName) == normalizeSearch(customer) && isOverdue(it.deliveryDate) }
+            .sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+    }
+    val receivableFuture = (ordersReceivable - receivableOverdue).coerceAtLeast(0.0)
+    val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.27") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.28") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -802,6 +808,8 @@ fun ControleQueijosApp(context: Context) {
                             Text("Custo total de entrada: R$ %.2f".format(entryCostTotal))
                             Text("Lucro bruto: R$ %.2f".format(grossProfit))
                             Text("Margem líquida: %.2f%%".format(profitMargin))
+                            Text("A receber em atraso: R$ %.2f".format(receivableOverdue))
+                            Text("A receber futuro: R$ %.2f".format(receivableFuture))
                         }
                     }
 
@@ -851,6 +859,16 @@ fun ControleQueijosApp(context: Context) {
                                 "📅 ${dueTodayOrders.size} entrega(s) prevista(s) para hoje.",
                                 modifier = Modifier.padding(16.dp)
                             )
+                        }
+                    }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("💳 Contas a receber", style = MaterialTheme.typography.titleMedium)
+                            Text("Total em aberto: R$ %.2f".format(ordersReceivable))
+                            Text("Em atraso: R$ %.2f • %d encomenda(s)".format(receivableOverdue, overdueReceivableOrders))
+                            Text("A vencer: R$ %.2f".format(receivableFuture))
+                            Text("Clientes com saldo: $clientsWithBalance")
                         }
                     }
 
