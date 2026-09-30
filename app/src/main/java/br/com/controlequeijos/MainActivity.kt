@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.31 — fechamento financeiro e visão de caixa
+// V7.32 — fechamento financeiro completo
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.31")
+        put("appVersion", "V7.32")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -767,6 +767,12 @@ fun ControleQueijosApp(context: Context) {
     val totalCashIn = directSalesReceived + orderReceivedInPeriod
     val totalCashOut = filteredExpenses.sumOf { it.value }
     val cashBalance = totalCashIn - totalCashOut
+    val financialClosingBalance = revenue - cost - expenseTotal
+    val closingReceivable = ordersReceivable
+    val closingOrderCount = activeOrders.size
+    val closingDeliveredCount = deliveredOrders.size
+    val closingPendingCount = pendingOrders.size
+    val closingOverdueCount = overdueOrders.size
     val paymentCountInPeriod = filteredPayments.count()
     val receivedAverage = if (paymentCountInPeriod > 0) orderReceivedInPeriod / paymentCountInPeriod else 0.0
     val paymentsByDate = filteredPayments.sortedByDescending { it.date }
@@ -774,7 +780,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.31") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.32") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1167,6 +1173,22 @@ fun ControleQueijosApp(context: Context) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("📒 Fechamento do período", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento: R$ %.2f".format(revenue))
+                            Text("Custos de entrada: R$ %.2f".format(cost))
+                            Text("Despesas: R$ %.2f".format(expenseTotal))
+                            Text("Lucro líquido: R$ %.2f".format(financialClosingBalance), style = MaterialTheme.typography.titleLarge)
+                            Text("Saldo de caixa: R$ %.2f".format(cashBalance))
+                            Text("A receber: R$ %.2f".format(closingReceivable))
+                            Text("Encomendas: $closingOrderCount • Entregues: $closingDeliveredCount")
+                            Text("Pendentes: $closingPendingCount • Atrasadas: $closingOverdueCount")
+                            Text("Recebimentos registrados: $paymentCountInPeriod")
+                            Text("Período selecionado: $period", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                                        Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("🧀 CUSTO TOTAL DAS ENCOMENDAS", style = MaterialTheme.typography.titleMedium)
                             Text("Entrada (custo): R$ %.2f".format(orderCost), style = MaterialTheme.typography.titleLarge)
