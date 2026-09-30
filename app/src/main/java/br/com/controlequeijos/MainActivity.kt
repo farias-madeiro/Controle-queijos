@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.32 — fechamento financeiro completo
+// V7.33 — indicadores de entregas atrasadas padronizados
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.32")
+        put("appVersion", "V7.33")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -321,6 +321,7 @@ private fun dateOnly(time: Long): String = SimpleDateFormat("dd/MM/yyyy", Locale
 private fun sameDay(time: Long): Boolean = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 private fun sameMonth(time: Long): Boolean = SimpleDateFormat("yyyyMM", Locale.US).format(Date(time)) == SimpleDateFormat("yyyyMM", Locale.US).format(Date())
 private fun isOverdue(time: Long): Boolean = time < System.currentTimeMillis()
+private fun isDeliveryOverdue(order: Order): Boolean = order.status != "Entregue" && order.status != "Cancelada" && isOverdue(order.deliveryDate)
 private fun sameDayOffset(time: Long, offset: Int): Boolean {
     val target = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
     val value = Calendar.getInstance().apply { timeInMillis = time }
@@ -680,7 +681,7 @@ fun ControleQueijosApp(context: Context) {
     val ordersPaid = activeOrders.sumOf { effectivePaid(it, payments) }
     val ordersReceivable = (ordersTotal - ordersPaid).coerceAtLeast(0.0)
     val pendingOrders = activeOrders.filter { it.status == "Pendente" }
-    val overdueOrders = activeOrders.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+    val overdueOrders = activeOrders.filter { isDeliveryOverdue(it) }
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
@@ -690,7 +691,7 @@ fun ControleQueijosApp(context: Context) {
             "Pendentes" -> o.status == "Pendente"
             "Em produção" -> o.status == "Em produção"
             "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue" && o.status != "Cancelada"
-            "Atrasadas" -> o.status != "Entregue" && o.status != "Cancelada" && isOverdue(o.deliveryDate)
+            "Atrasadas" -> isDeliveryOverdue(o)
             "Entregues" -> o.status == "Entregue"
             "Canceladas" -> o.status == "Cancelada"
             else -> true
@@ -780,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.32") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.33") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1281,7 +1282,7 @@ fun ControleQueijosApp(context: Context) {
                     val ordersReportPending = ordersReportActive.count { it.status == "Pendente" }
                     val ordersReportProduction = ordersReportActive.count { it.status == "Em produção" }
                     val ordersReportDelivered = ordersReportActive.count { it.status == "Entregue" }
-                    val ordersReportOverdue = ordersReportActive.count { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+                    val ordersReportOverdue = ordersReportActive.count { isDeliveryOverdue(it) }
                     val ordersReportUnits = ordersReportActive.sumOf { it.quantity }
                     val ordersReportSales = ordersReportActive.sumOf { it.totalValue }
                     val ordersReportEntry = ordersReportActive.sumOf { it.quantity * it.unitCost }
@@ -1449,16 +1450,16 @@ fun ControleQueijosApp(context: Context) {
             .filter { normalizedReceivableSearch.isBlank() || normalizeSearch(it.customerName).contains(normalizedReceivableSearch) || normalizeSearch(it.productName).contains(normalizedReceivableSearch) }
             .filter {
                 when (receivableFilter) {
-                    "Atrasadas" -> it.status != "Entregue" && isOverdue(it.deliveryDate)
+                    "Atrasadas" -> isDeliveryOverdue(it)
                     "Entregues" -> it.status == "Entregue"
                     "Pendentes" -> it.status != "Entregue"
                     else -> true
                 }
             }
-            .sortedWith(compareByDescending<Order> { it.status != "Entregue" && isOverdue(it.deliveryDate) }.thenBy { it.deliveryDate })
+            .sortedWith(compareByDescending<Order> { isDeliveryOverdue(it) }.thenBy { it.deliveryDate })
 
         val totalReceivable = openReceivables.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
-        val overdueReceivable = openReceivables.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+        val overdueReceivable = openReceivables.filter { isDeliveryOverdue(it) }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
         val deliveredReceivable = openReceivables.filter { it.status == "Entregue" }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
         val receivableByClient = openReceivables.groupBy { normalizeSearch(it.customerName) }.map { (_, group) ->
             group.first().customerName.trim() to group.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
@@ -1498,7 +1499,7 @@ fun ControleQueijosApp(context: Context) {
         Text("Encomendas em aberto", style = MaterialTheme.typography.titleMedium)
         if (visibleReceivables.isEmpty()) Text("Nenhuma encomenda encontrada.") else visibleReceivables.take(30).forEach { order ->
             val balance = (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0)
-            val overdue = order.status != "Entregue" && isOverdue(order.deliveryDate)
+            val overdue = isDeliveryOverdue(order)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(order.customerName, style = MaterialTheme.typography.titleMedium)
@@ -1789,7 +1790,7 @@ fun ControleQueijosApp(context: Context) {
 if (selectedTab == 2) item {
                     Text("Encomendas", style = MaterialTheme.typography.headlineSmall)
                     val activeOrders = orders.filter { it.status != "Cancelada" }
-                    val overdueCount = activeOrders.count { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+                    val overdueCount = activeOrders.count { isDeliveryOverdue(it) }
                     val todayCount = activeOrders.count { it.status != "Entregue" && sameDay(it.deliveryDate) }
                     val tomorrowCount = activeOrders.count { it.status != "Entregue" && sameDayOffset(it.deliveryDate, 1) }
                     val nextSevenCount = activeOrders.count { it.status != "Entregue" && inNextSevenDays(it.deliveryDate) }
@@ -1844,7 +1845,7 @@ if (selectedTab == 2) item {
                                 orderPayments.take(5).forEach { p -> Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "", style = MaterialTheme.typography.bodySmall) }
                             }
                             Text("Pedido: " + dateOnly(o.orderDate) + " | Entrega: " + dateOnly(o.deliveryDate))
-                            Text("Status: " + o.status + if (o.status != "Entregue" && o.status != "Cancelada" && isOverdue(o.deliveryDate)) " • ATRASADA" else "")
+                            Text("Status: " + o.status + if (isDeliveryOverdue(o)) " • ATRASADA" else "")
                             Text(
                                 if (o.totalValue - o.paidValue <= 0.005) "Pagamento: QUITADO"
                                 else "Pagamento: PENDENTE — R$ %.2f".format(o.totalValue - o.paidValue)
@@ -2358,7 +2359,7 @@ private fun buildOrdersReportText(period: String, orders: List<Order>): String {
     val pending = active.filter { it.status == "Pendente" }
     val production = active.filter { it.status == "Em produção" }
     val delivered = active.filter { it.status == "Entregue" }
-    val overdue = active.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+    val overdue = active.filter { isDeliveryOverdue(it) }
     val totalUnits = active.sumOf { it.quantity }
     val deliveredUnits = delivered.sumOf { it.quantity }
     val pendingUnits = active.filter { it.status != "Entregue" }.sumOf { it.quantity }
@@ -2419,7 +2420,7 @@ private fun buildOperationalReportText(period: String, orders: List<Order>): Str
     val pending = active.filter { it.status == "Pendente" }
     val production = active.filter { it.status == "Em produção" }
     val delivered = active.filter { it.status == "Entregue" }
-    val overdue = active.filter { it.status != "Entregue" && isOverdue(it.deliveryDate) }
+    val overdue = active.filter { isDeliveryOverdue(it) }
     val dueToday = active.filter { it.status != "Entregue" && sameDay(it.deliveryDate) }
     val productSummary = active.groupBy { normalizeSearch(it.productName) }.values
         .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
