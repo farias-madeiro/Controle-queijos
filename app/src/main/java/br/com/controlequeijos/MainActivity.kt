@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.34 — resumo de produção e indicadores de entrega
+// V7.35 — resumo operacional com visão financeira da produção
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.34")
+        put("appVersion", "V7.35")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.34") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.35") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2433,12 +2433,22 @@ private fun buildOperationalReportText(period: String, orders: List<Order>): Str
         val totalUnits = active.sumOf { it.quantity }
         appendLine("Encomendas: " + active.size)
         appendLine("Produtos diferentes: " + productSummary.size)
+        val totalSales = active.sumOf { it.totalValue }
+        val totalEntry = active.sumOf { it.quantity * it.unitCost }
+        val grossProfit = totalSales - totalEntry
+        val receivable = active.sumOf { (it.totalValue - effectivePaid(it, emptyList())).coerceAtLeast(0.0) }
         appendLine("Unidades a produzir/entregar: " + totalUnits)
         appendLine("Pendentes: " + pending.size)
         appendLine("Em produção: " + production.size)
         appendLine("Entregues: " + delivered.size)
         appendLine("Atrasadas: " + overdue.size)
         appendLine("Para hoje: " + dueToday.size)
+        appendLine()
+        appendLine("VISÃO FINANCEIRA DA PRODUÇÃO")
+        appendLine("Valor de venda: R$ %.2f".format(totalSales))
+        appendLine("Valor de entrada: R$ %.2f".format(totalEntry))
+        appendLine("Lucro bruto estimado: R$ %.2f".format(grossProfit))
+        appendLine("A receber: R$ %.2f".format(receivable))
         appendLine()
         appendLine("PRODUÇÃO CONSOLIDADA POR PRODUTO")
         if (productSummary.isEmpty()) appendLine("Nenhuma encomenda no período.")
