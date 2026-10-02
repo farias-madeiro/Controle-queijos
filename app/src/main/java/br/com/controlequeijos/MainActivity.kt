@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.36 — resumo operacional com separação financeira e recebimentos
+// V7.37 — painel inicial com resumo do dia
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.36")
+        put("appVersion", "V7.37")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.36") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.37") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -813,6 +813,23 @@ fun ControleQueijosApp(context: Context) {
                     Text("Painel de controle", style = MaterialTheme.typography.headlineSmall)
                     Text("Visão rápida do seu negócio", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(4.dp))
+
+                    val todayOrders = activeOrders.filter { it.status != "Entregue" && sameDay(it.deliveryDate) }
+                    val todayUnits = todayOrders.sumOf { it.quantity }
+                    val todayOrderValue = todayOrders.sumOf { it.totalValue }
+                    val todayReceived = filteredPayments.filter { sameDay(it.date) }.sumOf { it.amount }
+                    val todayReceivable = todayOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("📅 Resumo de hoje", style = MaterialTheme.typography.titleMedium)
+                            Text("Entregas previstas: ${todayOrders.size}")
+                            Text("Unidades: $todayUnits")
+                            Text("Valor das encomendas: R$ %.2f".format(todayOrderValue))
+                            Text("Recebimentos de hoje: R$ %.2f".format(todayReceived))
+                            Text("A receber dessas encomendas: R$ %.2f".format(todayReceivable))
+                        }
+                    }
 
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
