@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.35 — resumo operacional com visão financeira da produção
+// V7.36 — resumo operacional com separação financeira e recebimentos
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.35")
+        put("appVersion", "V7.36")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.35") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.36") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2436,7 +2436,9 @@ private fun buildOperationalReportText(period: String, orders: List<Order>): Str
         val totalSales = active.sumOf { it.totalValue }
         val totalEntry = active.sumOf { it.quantity * it.unitCost }
         val grossProfit = totalSales - totalEntry
+        val received = active.sumOf { effectivePaid(it, emptyList()) }
         val receivable = active.sumOf { (it.totalValue - effectivePaid(it, emptyList())).coerceAtLeast(0.0) }
+        val marginPercent = if (totalSales > 0.0) (grossProfit / totalSales) * 100.0 else 0.0
         appendLine("Unidades a produzir/entregar: " + totalUnits)
         appendLine("Pendentes: " + pending.size)
         appendLine("Em produção: " + production.size)
@@ -2448,6 +2450,8 @@ private fun buildOperationalReportText(period: String, orders: List<Order>): Str
         appendLine("Valor de venda: R$ %.2f".format(totalSales))
         appendLine("Valor de entrada: R$ %.2f".format(totalEntry))
         appendLine("Lucro bruto estimado: R$ %.2f".format(grossProfit))
+        appendLine("Margem bruta estimada: %.2f%%".format(marginPercent))
+        appendLine("Valor recebido: R$ %.2f".format(received))
         appendLine("A receber: R$ %.2f".format(receivable))
         appendLine()
         appendLine("PRODUÇÃO CONSOLIDADA POR PRODUTO")
