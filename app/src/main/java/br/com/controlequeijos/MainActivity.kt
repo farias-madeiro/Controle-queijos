@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.38 — resumo diário com custo e lucro bruto
+// V7.39 — resultado financeiro de hoje
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.38")
+        put("appVersion", "V7.39")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.38") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.39") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -819,6 +819,7 @@ fun ControleQueijosApp(context: Context) {
                     val todayOrderValue = todayOrders.sumOf { it.totalValue }
                     val todayEntryCost = todayOrders.sumOf { it.quantity * it.unitCost }
                     val todayGrossProfit = todayOrderValue - todayEntryCost
+                    val todayMargin = if (todayOrderValue > 0.0) (todayGrossProfit / todayOrderValue) * 100.0 else 0.0
                     val todayReceived = filteredPayments.filter { sameDay(it.date) }.sumOf { it.amount }
                     val todayReceivable = todayOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
 
@@ -830,6 +831,7 @@ fun ControleQueijosApp(context: Context) {
                             Text("Valor das encomendas: R$ %.2f".format(todayOrderValue))
                             Text("Custo de entrada: R$ %.2f".format(todayEntryCost))
                             Text("Lucro bruto estimado: R$ %.2f".format(todayGrossProfit))
+                            Text("Margem bruta estimada: %.2f%%".format(todayMargin))
                             Text("Recebimentos de hoje: R$ %.2f".format(todayReceived))
                             Text("A receber dessas encomendas: R$ %.2f".format(todayReceivable))
                         }
