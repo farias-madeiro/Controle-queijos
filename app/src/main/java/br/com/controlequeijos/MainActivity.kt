@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.39 — resultado financeiro de hoje
+// V7.40 — fechamento de caixa de hoje
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.39")
+        put("appVersion", "V7.40")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.39") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.40") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -821,6 +821,10 @@ fun ControleQueijosApp(context: Context) {
                     val todayGrossProfit = todayOrderValue - todayEntryCost
                     val todayMargin = if (todayOrderValue > 0.0) (todayGrossProfit / todayOrderValue) * 100.0 else 0.0
                     val todayReceived = filteredPayments.filter { sameDay(it.date) }.sumOf { it.amount }
+                    val todayDirectSalesReceived = filteredSales.filter { sameDay(it.date) }.sumOf { it.quantity * it.unitValue }
+                    val todayCashIn = todayReceived + todayDirectSalesReceived
+                    val todayExpenses = filteredExpenses.filter { sameDay(it.date) }.sumOf { it.value }
+                    val todayCashBalance = todayCashIn - todayExpenses
                     val todayReceivable = todayOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
 
                     Card(Modifier.fillMaxWidth()) {
@@ -833,6 +837,9 @@ fun ControleQueijosApp(context: Context) {
                             Text("Lucro bruto estimado: R$ %.2f".format(todayGrossProfit))
                             Text("Margem bruta estimada: %.2f%%".format(todayMargin))
                             Text("Recebimentos de hoje: R$ %.2f".format(todayReceived))
+                            Text("Entradas de caixa hoje: R$ %.2f".format(todayCashIn))
+                            Text("Saídas de caixa hoje: R$ %.2f".format(todayExpenses))
+                            Text("Saldo de caixa hoje: R$ %.2f".format(todayCashBalance))
                             Text("A receber dessas encomendas: R$ %.2f".format(todayReceivable))
                         }
                     }
