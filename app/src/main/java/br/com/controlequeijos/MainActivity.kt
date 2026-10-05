@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.40 — fechamento de caixa de hoje
+// V7.41 — fechamento diário com resultado líquido
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.40")
+        put("appVersion", "V7.41")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.40") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.41") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -825,6 +825,7 @@ fun ControleQueijosApp(context: Context) {
                     val todayCashIn = todayReceived + todayDirectSalesReceived
                     val todayExpenses = filteredExpenses.filter { sameDay(it.date) }.sumOf { it.value }
                     val todayCashBalance = todayCashIn - todayExpenses
+                    val todayNetResult = todayGrossProfit - todayExpenses
                     val todayReceivable = todayOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
 
                     Card(Modifier.fillMaxWidth()) {
@@ -840,6 +841,7 @@ fun ControleQueijosApp(context: Context) {
                             Text("Entradas de caixa hoje: R$ %.2f".format(todayCashIn))
                             Text("Saídas de caixa hoje: R$ %.2f".format(todayExpenses))
                             Text("Saldo de caixa hoje: R$ %.2f".format(todayCashBalance))
+                            Text("Resultado líquido estimado: R$ %.2f".format(todayNetResult))
                             Text("A receber dessas encomendas: R$ %.2f".format(todayReceivable))
                         }
                     }
