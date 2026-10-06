@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.41 — fechamento diário com resultado líquido
+// V7.42 — resultado diário completo com vendas diretas
 
 import android.content.Context
 import android.os.Bundle
@@ -234,7 +234,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.41")
+        put("appVersion", "V7.42")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.41") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.42") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -818,8 +818,11 @@ fun ControleQueijosApp(context: Context) {
                     val todayUnits = todayOrders.sumOf { it.quantity }
                     val todayOrderValue = todayOrders.sumOf { it.totalValue }
                     val todayEntryCost = todayOrders.sumOf { it.quantity * it.unitCost }
-                    val todayGrossProfit = todayOrderValue - todayEntryCost
-                    val todayMargin = if (todayOrderValue > 0.0) (todayGrossProfit / todayOrderValue) * 100.0 else 0.0
+                    val todayDirectSalesRevenue = filteredSales.filter { sameDay(it.date) }.sumOf { it.quantity * it.unitValue }
+                    val todayDirectSalesCost = filteredSales.filter { sameDay(it.date) }.sumOf { it.quantity * it.unitCost }
+                    val todayGrossProfit = (todayOrderValue - todayEntryCost) + (todayDirectSalesRevenue - todayDirectSalesCost)
+                    val todayMarginBase = todayOrderValue + todayDirectSalesRevenue
+                    val todayMargin = if (todayMarginBase > 0.0) (todayGrossProfit / todayMarginBase) * 100.0 else 0.0
                     val todayReceived = filteredPayments.filter { sameDay(it.date) }.sumOf { it.amount }
                     val todayDirectSalesReceived = filteredSales.filter { sameDay(it.date) }.sumOf { it.quantity * it.unitValue }
                     val todayCashIn = todayReceived + todayDirectSalesReceived
@@ -836,6 +839,7 @@ fun ControleQueijosApp(context: Context) {
                             Text("Valor das encomendas: R$ %.2f".format(todayOrderValue))
                             Text("Custo de entrada: R$ %.2f".format(todayEntryCost))
                             Text("Lucro bruto estimado: R$ %.2f".format(todayGrossProfit))
+                            Text("Vendas diretas hoje: R$ %.2f".format(todayDirectSalesRevenue))
                             Text("Margem bruta estimada: %.2f%%".format(todayMargin))
                             Text("Recebimentos de hoje: R$ %.2f".format(todayReceived))
                             Text("Entradas de caixa hoje: R$ %.2f".format(todayCashIn))
