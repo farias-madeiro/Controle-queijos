@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.42 — resultado diário completo com vendas diretas
+// V7.43 — indicadores visuais do resumo financeiro
 
 import android.content.Context
 import android.os.Bundle
@@ -866,6 +866,29 @@ fun ControleQueijosApp(context: Context) {
                     Text("Recebimentos no período: R$ %.2f".format(orderReceivedInPeriod))
                     Text("Saldo de caixa: R$ %.2f".format(cashBalance))
         Text("Recebimentos registrados: $paymentCountInPeriod • Média: R$ %.2f".format(receivedAverage))
+                        }
+                    }
+
+                    val visualMax = maxOf(revenue, expenseTotal, kotlin.math.abs(profit), 1.0)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("📊 Indicadores visuais", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento: R$ %.2f".format(revenue))
+                            LinearProgressIndicator(
+                                progress = { (revenue / visualMax).toFloat().coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text("Gastos: R$ %.2f".format(expenseTotal))
+                            LinearProgressIndicator(
+                                progress = { (expenseTotal / visualMax).toFloat().coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text("Lucro líquido: R$ %.2f".format(profit))
+                            LinearProgressIndicator(
+                                progress = { (kotlin.math.abs(profit) / visualMax).toFloat().coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text("Barras proporcionais aos valores do período.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
