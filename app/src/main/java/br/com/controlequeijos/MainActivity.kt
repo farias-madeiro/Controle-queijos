@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.43 — indicadores visuais do resumo financeiro
+// V7.44 — indicador de recebimentos e valores a receber
 
 import android.content.Context
 import android.os.Bundle
@@ -830,6 +830,8 @@ fun ControleQueijosApp(context: Context) {
                     val todayCashBalance = todayCashIn - todayExpenses
                     val todayNetResult = todayGrossProfit - todayExpenses
                     val todayReceivable = todayOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+                    val todayCollectionBase = todayReceived + todayReceivable
+                    val todayCollectionRate = if (todayCollectionBase > 0.0) (todayReceived / todayCollectionBase) * 100.0 else 0.0
 
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -847,6 +849,21 @@ fun ControleQueijosApp(context: Context) {
                             Text("Saldo de caixa hoje: R$ %.2f".format(todayCashBalance))
                             Text("Resultado líquido estimado: R$ %.2f".format(todayNetResult))
                             Text("A receber dessas encomendas: R$ %.2f".format(todayReceivable))
+                            Text("Percentual já recebido: %.2f%%".format(todayCollectionRate))
+                        }
+                    }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("💳 Recebimentos de hoje", style = MaterialTheme.typography.titleMedium)
+                            Text("Recebido: R$ %.2f".format(todayReceived))
+                            LinearProgressIndicator(
+                                progress = { (todayCollectionRate / 100.0).toFloat().coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text("A receber: R$ %.2f".format(todayReceivable))
+                            Text("Cobertura de recebimento: %.2f%%".format(todayCollectionRate))
+                            Text("Indicador baseado nas encomendas previstas para hoje.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
