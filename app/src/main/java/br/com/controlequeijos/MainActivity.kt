@@ -781,7 +781,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.45") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.42") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2202,4 +2202,664 @@ if (selectedTab == 2) item {
     }
 }
 
+}
+
+@Composable
+private fun DashboardBar(label: String, valueText: String, value: Double, maxValue: Double) {
+    val progress = if (maxValue > 0.0) (value / maxValue).coerceIn(0.0, 1.0).toFloat() else 0f
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodySmall)
+            Text(valueText, style = MaterialTheme.typography.labelLarge)
+        }
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun DashboardCard(title: String, value: String) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            Text(value, style = MaterialTheme.typography.titleLarge)
+        }
+    }
+}
+
+private fun buildOrderMessage(order: Order): String {
+    val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — ENCOMENDA")
+        appendLine()
+        appendLine("Cliente: " + order.customerName)
+        appendLine("Produto: " + order.productName)
+        appendLine("Quantidade: " + order.quantity + " un.")
+        appendLine("Valor total: R$ %.2f".format(order.totalValue))
+        appendLine("Valor pago: R$ %.2f".format(order.paidValue))
+        appendLine("Saldo: R$ %.2f".format(balance))
+        appendLine("Entrega prevista: " + dateOnly(order.deliveryDate))
+        appendLine("Status: " + order.status)
+        appendLine()
+        appendLine("Obrigado pela preferência!")
+    }
+}
+
+
+private fun buildClientStatementMessage(client: Client, orders: List<Order>, payments: List<Payment>): String {
+    val total = orders.sumOf { it.totalValue }
+    val paid = payments.sumOf { it.amount }
+    val balance = (total - paid).coerceAtLeast(0.0)
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — EXTRATO DO CLIENTE")
+        appendLine()
+        appendLine("Cliente: " + client.name)
+        if (client.phone.isNotBlank()) appendLine("Telefone: " + client.phone)
+        appendLine("Total das encomendas: R$ %.2f".format(total))
+        appendLine("Recebimentos registrados: R$ %.2f".format(paid))
+        appendLine("Saldo pendente: R$ %.2f".format(balance))
+        appendLine()
+        appendLine("RECEBIMENTOS")
+        if (payments.isEmpty()) appendLine("Nenhum recebimento registrado.")
+        else payments.sortedByDescending { it.date }.forEach { p ->
+            appendLine(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "")
+        }
+        appendLine()
+        appendLine("ENCOMENDAS")
+        orders.sortedByDescending { it.orderDate }.forEach { order ->
+            appendLine(dateOnly(order.orderDate) + " — " + order.productName + " — " + order.quantity + " un. — R$ %.2f — ".format(order.totalValue) + order.status)
+        }
+    }
+}
+
+private fun buildClientMessage(client: Client, orders: List<Order>, total: Double, paid: Double): String {
+    val balance = (total - paid).coerceAtLeast(0.0)
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — CLIENTE")
+        appendLine()
+        appendLine("Cliente: " + client.name)
+        if (client.phone.isNotBlank()) appendLine("Telefone: " + client.phone)
+        appendLine("Encomendas: " + orders.size)
+        appendLine("Total: R$ %.2f".format(total))
+        appendLine("Recebido: R$ %.2f".format(paid))
+        appendLine("Saldo: R$ %.2f".format(balance))
+        appendLine()
+        orders.sortedByDescending { it.orderDate }.take(10).forEach {
+            appendLine(dateOnly(it.orderDate) + " — " + it.productName + " (" + it.quantity + " un.) — R$ %.2f".format(it.totalValue))
+        }
+    }
+}
+
+private fun csvCell(value: String): String = "\"" + value.replace("\"", "\"\"").replace("\n", " ").replace("\r", " ") + "\""
+
+private fun buildOrdersCsv(period: String, orders: List<Order>, payments: List<Payment>): String = buildString {
+    appendLine("CONTROLE QUEIJOS — ENCOMENDAS")
+    appendLine("Período;${csvCell(period)}")
+    appendLine()
+    appendLine("Data;Cliente;Produto;Quantidade;Valor total;Pago;Saldo;Status;Entrega")
+    orders.sortedByDescending { it.orderDate }.forEach { order ->
+        val paid = payments.filter { it.orderId == order.id }.sumOf { it.amount }
+        val received = if (paid > 0.005) paid else order.paidValue
+        appendLine(listOf(dateOnly(order.orderDate), order.customerName, order.productName, order.quantity.toString(), "%.2f".format(order.totalValue), "%.2f".format(received), "%.2f".format((order.totalValue - received).coerceAtLeast(0.0)), order.status, dateOnly(order.deliveryDate)).joinToString(";") { csvCell(it) })
+    }
+}
+
+private fun buildFinancialCsv(period: String, orders: List<Order>, payments: List<Payment>, expenses: List<Expense>): String = buildString {
+    appendLine("CONTROLE QUEIJOS — FINANCEIRO")
+    appendLine("Período;${csvCell(period)}")
+    appendLine()
+    appendLine("TIPO;Data;Descrição;Cliente;Saída;Entrada;Lucro;Observação")
+    orders.sortedByDescending { it.orderDate }.forEach { order ->
+        val entry = order.quantity * order.unitCost
+        val profit = order.totalValue - entry
+        appendLine(listOf("Encomenda", dateOnly(order.orderDate), order.productName, order.customerName, "%.2f".format(order.totalValue), "%.2f".format(entry), "%.2f".format(profit), order.status).joinToString(";") { csvCell(it) })
+    }
+    payments.sortedByDescending { it.date }.forEach { p ->
+        val order = orders.firstOrNull { it.id == p.orderId }
+        appendLine(listOf("Recebimento", dateText(p.date), "Recebimento", order?.customerName ?: "", "%.2f".format(p.amount), "", "", p.note).joinToString(";") { csvCell(it) })
+    }
+    expenses.sortedByDescending { it.date }.forEach { e ->
+        appendLine(listOf("Gasto", dateText(e.date), e.description, "", "%.2f".format(e.value), "", "", "").joinToString(";") { csvCell(it) })
+    }
+}
+
+private fun buildOrdersReportCsv(period: String, orders: List<Order>): String = buildString {
+    val active = orders.filter { it.status != "Cancelada" }
+    appendLine("CONTROLE QUEIJOS — RELATÓRIO DE ENCOMENDAS")
+    appendLine("Período;" + csvCell(period))
+    appendLine()
+    appendLine("Cliente;Produto;Quantidade;Venda;Entrada;Lucro bruto;Recebido;A receber;Status;Entrega")
+    active.sortedByDescending { it.orderDate }.forEach { order ->
+        val entry = order.quantity * order.unitCost
+        val profit = order.totalValue - entry
+        val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+        appendLine(listOf(
+            order.customerName, order.productName, order.quantity.toString(),
+            "%.2f".format(order.totalValue), "%.2f".format(entry), "%.2f".format(profit),
+            "%.2f".format(order.paidValue), "%.2f".format(balance), order.status, dateOnly(order.deliveryDate)
+        ).joinToString(";") { csvCell(it) })
+    }
+}
+
+private fun buildProductionCsv(period: String, orders: List<Order>): String {
+    val active = orders.filter { it.status != "Entregue" && it.status != "Cancelada" }
+    val summary = active.groupBy { normalizeSearch(it.productName) }.values
+        .map { it.first().productName.trim() to it.sumOf { order -> order.quantity } }
+        .sortedBy { normalizeSearch(it.first) }
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — PRODUÇÃO CONSOLIDADA")
+        appendLine("Período;${csvCell(period)}")
+        appendLine()
+        appendLine("Produto;Quantidade")
+        summary.forEach { (name, quantity) -> appendLine("${csvCell(name)};$quantity") }
+    }
+}
+
+private fun writeSimplePdf(output: OutputStream, text: String) {
+    val document = PdfDocument()
+    val pageWidth = 595
+    val pageHeight = 842
+    val left = 40f
+    val top = 52f
+    val lineHeight = 18f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        textSize = 12f
+    }
+    val lines = text.lines().flatMap { line ->
+        if (line.length <= 78) listOf(line) else line.chunked(78)
+    }
+    var pageNumber = 1
+    var index = 0
+    while (index < lines.size || (lines.isEmpty() && pageNumber == 1)) {
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        val page = document.startPage(pageInfo)
+        var y = top
+        while (index < lines.size && y <= pageHeight - 45f) {
+            page.canvas.drawText(lines[index], left, y, paint)
+            y += lineHeight
+            index++
+        }
+        document.finishPage(page)
+        pageNumber++
+        if (lines.isEmpty()) break
+    }
+    document.writeTo(output)
+    document.close()
+}
+
+private fun buildFinancialReportText(
+    period: String,
+    saleRevenue: Double,
+    orderRevenue: Double,
+    orderEntryCost: Double,
+    cost: Double,
+    expenses: Double,
+    profit: Double,
+    margin: Double,
+    ordersTotal: Double,
+    ordersPaid: Double,
+    receivable: Double,
+    pending: Int,
+    production: Int,
+    overdue: Int,
+    dueToday: Int,
+    paymentsReceived: Double,
+    paymentCount: Int
+): String = buildString {
+    appendLine("CONTROLE QUEIJOS — RELATÓRIO FINANCEIRO")
+    appendLine("Período: " + period)
+    appendLine()
+    appendLine("Vendas realizadas: R$ %.2f".format(saleRevenue))
+    appendLine("Encomendas entregues — saída: R$ %.2f".format(orderRevenue))
+    appendLine("Encomendas entregues — entrada: R$ %.2f".format(orderEntryCost))
+    appendLine("Lucro bruto das encomendas: R$ %.2f".format(orderRevenue - orderEntryCost))
+    appendLine("Faturamento: R$ %.2f".format(saleRevenue + orderRevenue))
+    appendLine("Custo total das mercadorias: R$ %.2f".format(cost))
+    appendLine("Gastos: R$ %.2f".format(expenses))
+    appendLine("Lucro líquido: R$ %.2f".format(profit))
+    appendLine("Margem: %.2f%%".format(margin))
+    appendLine()
+    appendLine("Encomendas no período: R$ %.2f".format(ordersTotal))
+    appendLine("Recebido de encomendas: R$ %.2f".format(ordersPaid))
+    appendLine("Recebimentos registrados: R$ %.2f".format(paymentsReceived))
+    appendLine("Quantidade de recebimentos: " + paymentCount)
+    val averagePayment = if (paymentCount > 0) paymentsReceived / paymentCount else 0.0
+    appendLine("Valor médio por recebimento: R$ %.2f".format(averagePayment))
+    appendLine("A receber: R$ %.2f".format(receivable))
+    val recebimento = if (ordersTotal > 0.005) (ordersPaid / ordersTotal * 100.0).coerceIn(0.0, 100.0) else 0.0
+    appendLine("Percentual recebido das encomendas: %.2f%%".format(recebimento))
+    appendLine()
+    appendLine("Encomendas pendentes: " + pending)
+    appendLine("Em produção: " + production)
+    appendLine("Entregas atrasadas: " + overdue)
+    appendLine("Entregas previstas para hoje: " + dueToday)
+}
+
+private fun buildOrdersReportText(period: String, orders: List<Order>): String {
+    val active = orders.filter { it.status != "Cancelada" }
+    val pending = active.filter { it.status == "Pendente" }
+    val production = active.filter { it.status == "Em produção" }
+    val delivered = active.filter { it.status == "Entregue" }
+    val overdue = active.filter { isDeliveryOverdue(it) }
+    val totalUnits = active.sumOf { it.quantity }
+    val deliveredUnits = delivered.sumOf { it.quantity }
+    val pendingUnits = active.filter { it.status != "Entregue" }.sumOf { it.quantity }
+    val salesTotal = active.sumOf { it.totalValue }
+    val entryTotal = active.sumOf { it.quantity * it.unitCost }
+    val grossProfit = salesTotal - entryTotal
+    val received = active.sumOf { it.paidValue }
+    val receivable = (salesTotal - received).coerceAtLeast(0.0)
+    val productSummary = active.groupBy { normalizeSearch(it.productName) }.values
+        .map { group ->
+            val name = group.first().productName.trim()
+            val units = group.sumOf { it.quantity }
+            val sales = group.sumOf { it.totalValue }
+            val entry = group.sumOf { it.quantity * it.unitCost }
+            Triple(name, units, sales - entry)
+        }
+        .sortedBy { normalizeSearch(it.first) }
+
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — RELATÓRIO DE ENCOMENDAS")
+        appendLine("Período: $period")
+        appendLine()
+        appendLine("Total de encomendas: " + active.size)
+        appendLine("Pendentes: " + pending.size)
+        appendLine("Em produção: " + production.size)
+        appendLine("Entregues: " + delivered.size)
+        appendLine("Atrasadas: " + overdue.size)
+        appendLine()
+        appendLine("Unidades totais: $totalUnits")
+        appendLine("Unidades pendentes de entrega: $pendingUnits")
+        appendLine("Unidades entregues: $deliveredUnits")
+        appendLine("Valor de saída (venda): R$ %.2f".format(salesTotal))
+        appendLine("Custo de entrada: R$ %.2f".format(entryTotal))
+        appendLine("Lucro bruto: R$ %.2f".format(grossProfit))
+        appendLine("Recebido: R$ %.2f".format(received))
+        appendLine("A receber: R$ %.2f".format(receivable))
+        appendLine()
+        appendLine("RESUMO POR PRODUTO")
+        if (productSummary.isEmpty()) appendLine("Nenhuma encomenda no período.")
+        else productSummary.forEach { (name, units, profit) ->
+            appendLine("• $name — $units un. — lucro bruto R$ %.2f".format(profit))
+        }
+        appendLine()
+        appendLine("DETALHAMENTO")
+        if (active.isEmpty()) appendLine("Nenhuma encomenda no período.")
+        else active.sortedByDescending { it.orderDate }.forEach { order ->
+            val entry = order.quantity * order.unitCost
+            val profit = order.totalValue - entry
+            val balance = (order.totalValue - order.paidValue).coerceAtLeast(0.0)
+            appendLine("• ${order.customerName} — ${order.productName} — ${order.quantity} un.")
+            appendLine("  ${order.status} • entrega ${dateOnly(order.deliveryDate)} • venda R$ %.2f • entrada R$ %.2f • lucro R$ %.2f • a receber R$ %.2f".format(order.totalValue, entry, profit, balance))
+        }
+    }
+}
+
+private fun buildOperationalReportText(period: String, orders: List<Order>): String {
+    val active = orders.filter { it.status != "Cancelada" }
+    val pending = active.filter { it.status == "Pendente" }
+    val production = active.filter { it.status == "Em produção" }
+    val delivered = active.filter { it.status == "Entregue" }
+    val overdue = active.filter { isDeliveryOverdue(it) }
+    val dueToday = active.filter { it.status != "Entregue" && sameDay(it.deliveryDate) }
+    val productSummary = active.groupBy { normalizeSearch(it.productName) }.values
+        .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
+        .sortedBy { normalizeSearch(it.first) }
+
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — RELATÓRIO OPERACIONAL")
+        appendLine("Período: $period")
+        appendLine()
+        val totalUnits = active.sumOf { it.quantity }
+        appendLine("Encomendas: " + active.size)
+        appendLine("Produtos diferentes: " + productSummary.size)
+        val totalSales = active.sumOf { it.totalValue }
+        val totalEntry = active.sumOf { it.quantity * it.unitCost }
+        val grossProfit = totalSales - totalEntry
+        val received = active.sumOf { effectivePaid(it, emptyList()) }
+        val receivable = active.sumOf { (it.totalValue - effectivePaid(it, emptyList())).coerceAtLeast(0.0) }
+        val marginPercent = if (totalSales > 0.0) (grossProfit / totalSales) * 100.0 else 0.0
+        appendLine("Unidades a produzir/entregar: " + totalUnits)
+        appendLine("Pendentes: " + pending.size)
+        appendLine("Em produção: " + production.size)
+        appendLine("Entregues: " + delivered.size)
+        appendLine("Atrasadas: " + overdue.size)
+        appendLine("Para hoje: " + dueToday.size)
+        appendLine()
+        appendLine("VISÃO FINANCEIRA DA PRODUÇÃO")
+        appendLine("Valor de venda: R$ %.2f".format(totalSales))
+        appendLine("Valor de entrada: R$ %.2f".format(totalEntry))
+        appendLine("Lucro bruto estimado: R$ %.2f".format(grossProfit))
+        appendLine("Margem bruta estimada: %.2f%%".format(marginPercent))
+        appendLine("Valor recebido: R$ %.2f".format(received))
+        appendLine("A receber: R$ %.2f".format(receivable))
+        appendLine()
+        appendLine("PRODUÇÃO CONSOLIDADA POR PRODUTO")
+        if (productSummary.isEmpty()) appendLine("Nenhuma encomenda no período.")
+        else productSummary.forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
+    }
+}
+
+private fun buildReportText(period: String, orders: List<Order>): String {
+    val productSummary = orders
+        .filter { it.status != "Cancelada" }
+        .groupBy { normalizeSearch(it.productName) }
+        .values
+        .map { group ->
+            val name = group.first().productName.trim()
+            val quantity = group.sumOf { it.quantity }
+            name to quantity
+        }
+        .sortedBy { normalizeSearch(it.first) }
+
+    val activeOrders = orders.filter { it.status != "Cancelada" }
+    val pendingUnits = activeOrders.filter { it.status == "Pendente" }.sumOf { it.quantity }
+    val productionUnits = activeOrders.filter { it.status == "Em produção" }.sumOf { it.quantity }
+    val totalUnits = activeOrders.filter { it.status != "Entregue" }.sumOf { it.quantity }
+
+    return buildString {
+        appendLine("CONTROLE QUEIJOS — LISTA DE PRODUÇÃO")
+        appendLine("Período: $period")
+        appendLine()
+        appendLine("A produzir: $pendingUnits un.")
+        appendLine("Em produção: $productionUnits un.")
+        appendLine("Total pendente de entrega: $totalUnits un.")
+        appendLine()
+        if (productSummary.isEmpty()) {
+            appendLine("Nenhuma encomenda no período.")
+        } else {
+            productSummary.forEach { (name, quantity) ->
+                appendLine("• $name — $quantity un.")
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun ClientStatementDialog(client: Client, orders: List<Order>, payments: List<Payment>, onDismiss: () -> Unit) {
+    val total = orders.sumOf { it.totalValue }
+    val paid = payments.sumOf { it.amount }
+    val balance = (total - paid).coerceAtLeast(0.0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Extrato — " + client.name) },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item { Text("Total das encomendas: R$ %.2f".format(total)) }
+                item { Text("Recebimentos registrados: R$ %.2f".format(paid)) }
+                item { Text("Saldo pendente: R$ %.2f".format(balance)) }
+                item { Spacer(Modifier.height(4.dp)); Text("HISTÓRICO DE RECEBIMENTOS", style = MaterialTheme.typography.labelLarge) }
+                if (payments.isEmpty()) item { Text("Nenhum recebimento registrado.") }
+                else payments.sortedByDescending { it.date }.forEach { p ->
+                    item { Text(dateText(p.date) + " — R$ %.2f".format(p.amount) + if (p.note.isNotBlank()) " — " + p.note else "") }
+                }
+                item { Spacer(Modifier.height(4.dp)); Text("HISTÓRICO DE ENCOMENDAS", style = MaterialTheme.typography.labelLarge) }
+                orders.sortedByDescending { it.orderDate }.forEach { order ->
+                    item { Text(dateOnly(order.orderDate) + " • " + order.productName + " • " + order.quantity + " un. • R$ %.2f • ".format(order.totalValue) + order.status) }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
+    )
+}
+
+@Composable
+private fun ClientDialog(
+    client: Client?,
+    clients: List<Client>,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit
+) {
+    var name by remember(client) { mutableStateOf(client?.name ?: "") }
+    var phone by remember(client) { mutableStateOf(client?.phone ?: "") }
+    var notes by remember(client) { mutableStateOf(client?.notes ?: "") }
+    var validationError by remember(client) { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (client == null) "Cadastrar cliente" else "Editar cliente") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    name,
+                    { name = it; validationError = "" },
+                    label = { Text("Nome") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    phone,
+                    { phone = it; validationError = "" },
+                    label = { Text("Telefone/WhatsApp") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    notes,
+                    { notes = it },
+                    label = { Text("Observações") },
+                    minLines = 2
+                )
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val cleanName = name.trim()
+                val cleanPhone = phone.trim()
+                val duplicateName = clients.any {
+                    it.id != client?.id && normalizeSearch(it.name) == normalizeSearch(cleanName)
+                }
+                val phoneDigits = normalizePhone(cleanPhone)
+                val duplicatePhone = phoneDigits.isNotBlank() && clients.any {
+                    it.id != client?.id && normalizePhone(it.phone) == phoneDigits
+                }
+
+                when {
+                    cleanName.isBlank() -> validationError = "Informe o nome do cliente."
+                    duplicateName -> validationError = "Já existe um cliente cadastrado com esse nome."
+                    duplicatePhone -> validationError = "Já existe um cliente cadastrado com esse telefone."
+                    else -> onSave(cleanName, cleanPhone, notes.trim())
+                }
+            }) { Text("Salvar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun PaymentDialog(order: Order, payments: List<Payment>, onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
+    var value by remember(order) { mutableStateOf("") }
+    var note by remember(order) { mutableStateOf("") }
+    val remaining = (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Registrar pagamento") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Cliente: " + order.customerName)
+                Text("Saldo atual: R$ %.2f".format(remaining))
+                OutlinedTextField(value, { value = it.replace(",", ".") }, label = { Text("Valor recebido") }, singleLine = true)
+                OutlinedTextField(note, { note = it }, label = { Text("Observação (opcional)") }, singleLine = true)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val amount = value.toDoubleOrNull() ?: 0.0
+                if (amount > 0 && amount <= remaining + 0.005) onSave(amount, note.trim())
+            }) { Text("Registrar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun ProductDialog(product: Product?, products: List<Product>, onDismiss: () -> Unit, onSave: (String, Int, Double, Double) -> Unit) {
+    var name by remember(product) { mutableStateOf(product?.name ?: "") }
+    var quantity by remember(product) { mutableStateOf(product?.quantity?.toString() ?: "0") }
+    var entry by remember(product) { mutableStateOf(product?.entryValue?.toString() ?: "0") }
+    var exit by remember(product) { mutableStateOf(product?.exitValue?.toString() ?: "0") }
+    var validationError by remember(product) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (product == null) "Cadastrar produto" else "Editar produto") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it; validationError = "" }, label = { Text("Nome") }, singleLine = true)
+                OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade disponível (opcional)") }, singleLine = true)
+                Text("Para produtos sob encomenda, você pode deixar 0 e usar apenas custo e preço de venda.")
+                OutlinedTextField(entry, { entry = it.replace(",", ".") }, label = { Text("Valor de entrada (custo/unidade)") }, singleLine = true)
+                OutlinedTextField(exit, { exit = it.replace(",", "."); validationError = "" }, label = { Text("Valor de saída (venda/unidade)") }, singleLine = true)
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val cleanName = name.trim()
+                val q = quantity.toIntOrNull() ?: 0
+                val e = entry.toDoubleOrNull() ?: 0.0
+                val s = exit.toDoubleOrNull() ?: 0.0
+                val duplicate = products.any { it.id != product?.id && normalizeSearch(it.name) == normalizeSearch(cleanName) }
+                when {
+                    cleanName.isBlank() -> validationError = "Informe o nome do produto."
+                    duplicate -> validationError = "Já existe um produto cadastrado com esse nome."
+                    q < 0 -> validationError = "A quantidade não pode ser negativa."
+                    e < 0.0 -> validationError = "O valor de entrada não pode ser negativo."
+                    s <= 0.0 -> validationError = "Informe um valor de saída maior que zero."
+                    s < e -> validationError = "O valor de saída não pode ser menor que o custo de entrada."
+                    else -> onSave(cleanName, q, e, s)
+                }
+            }) { Text("Salvar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun SaleDialog(product: Product, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+    var quantity by remember(product) { mutableStateOf("1") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Registrar venda — " + product.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Venda registrada sem controle de estoque.")
+                Text("Valor unitário: R$ %.2f".format(product.exitValue))
+                OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit) }, label = { Text("Quantidade vendida") }, singleLine = true)
+            }
+        },
+        confirmButton = { Button(onClick = { quantity.toIntOrNull()?.let { if (it > 0) onSave(it) } }) { Text("Registrar") } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun OrderDialog(product: Product, order: Order?, clients: List<Client>, onDismiss: () -> Unit, onSave: (String, Int, Long, Double) -> Unit) {
+    var customer by remember(order) { mutableStateOf(order?.customerName ?: "") }
+    var quantity by remember(order) { mutableStateOf(order?.quantity?.toString() ?: "1") }
+    var delivery by remember(order) { mutableStateOf(if (order == null) dateOnly(defaultDeliveryDate()) else dateOnly(order.deliveryDate)) }
+    var paid by remember(order) { mutableStateOf(order?.paidValue?.toString() ?: "0") }
+    var validationError by remember(order) { mutableStateOf("") }
+
+    val matchingClients = clients
+        .filter { customer.isNotBlank() && normalizeSearch(it.name).contains(normalizeSearch(customer)) }
+        .sortedBy { normalizeSearch(it.name) }
+        .take(5)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (order == null) "Nova encomenda" else "Editar encomenda") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Produto: " + product.name)
+                Text("Valor de venda: R$ %.2f/un.".format(order?.unitValue ?: product.exitValue))
+                OutlinedTextField(
+                    customer,
+                    { customer = it; validationError = "" },
+                    label = { Text("Nome do cliente") },
+                    singleLine = true
+                )
+                if (matchingClients.isNotEmpty()) {
+                    Text("Clientes cadastrados", style = MaterialTheme.typography.labelLarge)
+                    matchingClients.forEach { client ->
+                        OutlinedButton(
+                            onClick = {
+                                customer = client.name
+                                validationError = ""
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (client.phone.isNotBlank()) client.name + " • " + client.phone else client.name
+                            )
+                        }
+                    }
+                } else if (clients.isEmpty()) {
+                    Text("Dica: cadastre o cliente na aba Clientes para vinculá-lo automaticamente à encomenda.")
+                }
+                OutlinedTextField(
+                    quantity,
+                    { quantity = it.filter(Char::isDigit); validationError = "" },
+                    label = { Text(if (order?.stockApplied == true) "Quantidade (entregue)" else "Quantidade") },
+                    enabled = order?.stockApplied != true,
+                    singleLine = true
+                )
+                Text("Produção: sob encomenda — estoque não é obrigatório.")
+                OutlinedTextField(delivery, { delivery = it }, label = { Text("Data prevista (dd/MM/yyyy)") }, singleLine = true)
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
+                OutlinedTextField(paid, { paid = it.replace(",", ".") }, label = { Text("Valor pago") }, singleLine = true)
+                if (order == null) Text("Status inicial: Pendente")
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val q = quantity.toIntOrNull() ?: 0
+                val p = paid.toDoubleOrNull() ?: 0.0
+                val deliveryDate = parseDate(delivery, defaultDeliveryDate())
+                val referenceDate = order?.orderDate ?: System.currentTimeMillis()
+                if (customer.isBlank()) {
+                    validationError = "Informe o nome do cliente."
+                } else if (q <= 0) {
+                    validationError = "Informe uma quantidade válida."
+                } else if (p < 0.0) {
+                    validationError = "O valor pago não pode ser negativo."
+                } else if (p > (order?.totalValue ?: (q * product.exitValue)) + 0.005) {
+                    validationError = "O valor pago não pode ser maior que o total da encomenda."
+                } else if (deliveryDate < referenceDate - 24L * 60L * 60L * 1000L) {
+                    validationError = "A data de entrega não pode ser anterior à data da encomenda."
+                } else {
+                    onSave(customer.trim(), q, deliveryDate, p)
+                }
+            }) { Text("Salvar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+@Composable
+private fun ExpenseDialog(onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
+    var description by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Novo gasto") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(description, { description = it }, label = { Text("Descrição") }, singleLine = true)
+                OutlinedTextField(value, { value = it.replace(",", ".") }, label = { Text("Valor") }, singleLine = true)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val v = value.toDoubleOrNull() ?: 0.0
+                if (description.isNotBlank() && v > 0) onSave(description.trim(), v)
+            }) { Text("Salvar") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }
