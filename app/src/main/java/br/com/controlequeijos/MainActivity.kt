@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.45 — ticket médio e acompanhamento de recebimentos
+// V7.46 — alerta de encomendas em atraso
 
 import android.content.Context
 import android.os.Bundle
@@ -762,6 +762,7 @@ fun ControleQueijosApp(context: Context) {
             .sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
     }
     val receivableFuture = (ordersReceivable - receivableOverdue).coerceAtLeast(0.0)
+    val overdueOrderCount = activeOrders.count { isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) > 0.0 }
     val directSalesReceived = filteredSales.sumOf { it.quantity * it.unitValue }
     // Recebimentos entram no caixa pela data do pagamento, mesmo quando a encomenda é antiga.
     val orderReceivedInPeriod = filteredPayments.sumOf { it.amount }
@@ -879,6 +880,8 @@ fun ControleQueijosApp(context: Context) {
                             Text("Lucro líquido: R$ %.2f".format(profit))
                             Text("Recebido no período: R$ %.2f".format(filteredPayments.sumOf { it.amount }))
                             Text("A receber: R$ %.2f".format(ordersReceivable))
+                            Text("Encomendas em atraso: $overdueOrderCount")
+                            Text("Valor em atraso: R$ %.2f".format(receivableOverdue))
                             Text("Gastos: R$ %.2f".format(expenseTotal))
                             Text("Custo total de entrada: R$ %.2f".format(entryCostTotal))
                             Text("Lucro bruto: R$ %.2f".format(grossProfit))
