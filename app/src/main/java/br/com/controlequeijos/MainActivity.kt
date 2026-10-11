@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.46 — alerta de encomendas em atraso
+// V7.47 — previsão de entregas para os próximos três dias
 
 import android.content.Context
 import android.os.Bundle
@@ -763,6 +763,12 @@ fun ControleQueijosApp(context: Context) {
     }
     val receivableFuture = (ordersReceivable - receivableOverdue).coerceAtLeast(0.0)
     val overdueOrderCount = activeOrders.count { isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) > 0.0 }
+    val upcomingDeliveryOrders = orders.filter { order ->
+        order.status != "Entregue" && order.status != "Cancelada" &&
+            (0..2).any { offset -> sameDayOffset(order.deliveryDate, offset) }
+    }
+    val upcomingDeliveryUnits = upcomingDeliveryOrders.sumOf { it.quantity }
+    val upcomingDeliveryValue = upcomingDeliveryOrders.sumOf { it.totalValue }
     val directSalesReceived = filteredSales.sumOf { it.quantity * it.unitValue }
     // Recebimentos entram no caixa pela data do pagamento, mesmo quando a encomenda é antiga.
     val orderReceivedInPeriod = filteredPayments.sumOf { it.amount }
@@ -782,7 +788,7 @@ fun ControleQueijosApp(context: Context) {
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.42") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.47") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -882,6 +888,9 @@ fun ControleQueijosApp(context: Context) {
                             Text("A receber: R$ %.2f".format(ordersReceivable))
                             Text("Encomendas em atraso: $overdueOrderCount")
                             Text("Valor em atraso: R$ %.2f".format(receivableOverdue))
+                            Text("Entregas nos próximos 3 dias: ${upcomingDeliveryOrders.size}")
+                            Text("Unidades previstas: $upcomingDeliveryUnits")
+                            Text("Valor previsto para entrega: R$ %.2f".format(upcomingDeliveryValue))
                             Text("Gastos: R$ %.2f".format(expenseTotal))
                             Text("Custo total de entrada: R$ %.2f".format(entryCostTotal))
                             Text("Lucro bruto: R$ %.2f".format(grossProfit))
