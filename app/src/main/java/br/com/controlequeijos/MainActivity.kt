@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.47 — previsão de entregas para os próximos três dias
+// V7.48 — bloqueio automático por PIN ao sair do aplicativo
 
 import android.content.Context
 import android.os.Bundle
@@ -68,9 +68,16 @@ private const val USER_NAME = "user_name"
 private const val USER_ROLE = "user_role"
 
 class MainActivity : ComponentActivity() {
+    private val forcePinLock = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { ControleQueijosApp(applicationContext) }
+        setContent { ControleQueijosApp(applicationContext, forcePinLock.value) { forcePinLock.value = false } }
+    }
+
+    override fun onStop() {
+        forcePinLock.value = true
+        super.onStop()
     }
 }
 
@@ -354,7 +361,7 @@ private fun defaultDeliveryDate(): Long {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ControleQueijosApp(context: Context) {
+fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnlocked: () -> Unit = {}) {
     var products by remember { mutableStateOf(loadProducts(context)) }
     var sales by remember { mutableStateOf(loadSales(context)) }
     var expenses by remember { mutableStateOf(loadExpenses(context)) }
@@ -399,6 +406,14 @@ fun ControleQueijosApp(context: Context) {
     var pinDialog by remember { mutableStateOf(true) }
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
+    LaunchedEffect(forcePinLock) {
+        if (forcePinLock && hasPin) {
+            isUnlocked = false
+            pinDialog = true
+            pinInput = ""
+            pinError = ""
+        }
+    }
     var userName by remember { mutableStateOf(prefs.getString(USER_NAME, "Administrador") ?: "Administrador") }
     var userRole by remember { mutableStateOf(prefs.getString(USER_ROLE, "Administrador") ?: "Administrador") }
     var userDialog by remember { mutableStateOf(false) }
@@ -563,11 +578,13 @@ fun ControleQueijosApp(context: Context) {
                             isUnlocked = true
                             pinDialog = false
                             pinInput = ""
+                            onPinUnlocked()
                         } else pinError = "O PIN deve ter entre 4 e 8 dígitos."
                     } else if (hashPin(pinInput) == prefs.getString(PIN_HASH, "")) {
                         isUnlocked = true
                         pinDialog = false
                         pinInput = ""
+                        onPinUnlocked()
                     } else {
                         pinError = "PIN incorreto."
                         pinInput = ""
