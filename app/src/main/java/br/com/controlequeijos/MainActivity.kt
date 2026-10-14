@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.49 — painel da fila de produção com unidades e valor pendente
+// V7.50 — previsão de recebimentos pendentes para os próximos sete dias
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.42")
+        put("appVersion", "V7.50")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -704,6 +704,14 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
     val productionOrderUnits = productionOrders.sumOf { it.quantity }
     val productionOrderValue = productionOrders.sumOf { it.totalValue }
+    val upcomingReceivableOrders = orders.filter { order ->
+        order.status != "Entregue" && order.status != "Cancelada" &&
+            (0..6).any { offset -> sameDayOffset(order.deliveryDate, offset) } &&
+            (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0) > 0.005
+    }
+    val upcomingReceivableValue = upcomingReceivableOrders.sumOf {
+        (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0)
+    }
     val normalizedOrderSearch = normalizeSearch(orderSearch)
     val filteredVisibleOrders = filteredOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
@@ -807,7 +815,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.47") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.50") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -918,6 +926,8 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("Entregas nos próximos 3 dias: ${upcomingDeliveryOrders.size}")
                             Text("Unidades previstas: $upcomingDeliveryUnits")
                             Text("Valor previsto para entrega: R$ %.2f".format(upcomingDeliveryValue))
+                            Text("Encomendas com saldo a receber nos próximos 7 dias: ${upcomingReceivableOrders.size}")
+                            Text("Saldo previsto para receber: R$ %.2f".format(upcomingReceivableValue))
                             Text("Gastos: R$ %.2f".format(expenseTotal))
                             Text("Custo total de entrada: R$ %.2f".format(entryCostTotal))
                             Text("Lucro bruto: R$ %.2f".format(grossProfit))
