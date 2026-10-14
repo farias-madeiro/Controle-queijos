@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.51 — resumo financeiro da semana atual
+// V7.52 — resumo financeiro do mês atual
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.51")
+        put("appVersion", "V7.52")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -742,6 +742,23 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val weeklyNetProfit = weeklyGrossProfit - weeklyExpenseTotal
     val weeklyCashIn = weeklySalesRevenue + weeklyPayments.sumOf { it.amount }
     val weeklyCashBalance = weeklyCashIn - weeklyExpenseTotal
+    val monthlySales = sales.filter { sameMonth(it.date) }
+    val monthlyExpenses = expenses.filter { sameMonth(it.date) }
+    val monthlyPayments = payments.filter { sameMonth(it.date) }
+    val monthlyDeliveredOrders = orders.filter {
+        it.status == "Entregue" && sameMonth(it.deliveryDate)
+    }
+    val monthlySalesRevenue = monthlySales.sumOf { it.quantity * it.unitValue }
+    val monthlySalesCost = monthlySales.sumOf { it.quantity * it.unitCost }
+    val monthlyOrderRevenue = monthlyDeliveredOrders.sumOf { it.totalValue }
+    val monthlyOrderCost = monthlyDeliveredOrders.sumOf { it.quantity * it.unitCost }
+    val monthlyRevenue = monthlySalesRevenue + monthlyOrderRevenue
+    val monthlyCost = monthlySalesCost + monthlyOrderCost
+    val monthlyGrossProfit = monthlyRevenue - monthlyCost
+    val monthlyExpenseTotal = monthlyExpenses.sumOf { it.value }
+    val monthlyNetProfit = monthlyGrossProfit - monthlyExpenseTotal
+    val monthlyCashIn = monthlySalesRevenue + monthlyPayments.sumOf { it.amount }
+    val monthlyCashBalance = monthlyCashIn - monthlyExpenseTotal
     val normalizedOrderSearch = normalizeSearch(orderSearch)
     val filteredVisibleOrders = filteredOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
@@ -845,7 +862,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.51") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.52") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -942,6 +959,22 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("Saldo de caixa da semana: R$ %.2f".format(weeklyCashBalance))
                             Text("Encomendas entregues: ${weeklyDeliveredOrders.size} • Vendas diretas: ${weeklySales.size}")
                             Text("Período: segunda-feira a domingo.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("🗓️ Resumo financeiro do mês", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento do mês: R$ %.2f".format(monthlyRevenue))
+                            Text("Custos de entrada: R$ %.2f".format(monthlyCost))
+                            Text("Lucro bruto: R$ %.2f".format(monthlyGrossProfit))
+                            Text("Despesas do mês: R$ %.2f".format(monthlyExpenseTotal))
+                            Text("Resultado líquido estimado: R$ %.2f".format(monthlyNetProfit))
+                            Text("Recebimentos registrados: R$ %.2f".format(monthlyPayments.sumOf { it.amount }))
+                            Text("Entradas de caixa: R$ %.2f".format(monthlyCashIn))
+                            Text("Saldo de caixa do mês: R$ %.2f".format(monthlyCashBalance))
+                            Text("Encomendas entregues: ${monthlyDeliveredOrders.size} • Vendas diretas: ${monthlySales.size}")
+                            Text("Período: primeiro ao último dia do mês atual.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
