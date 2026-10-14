@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.50 — previsão de recebimentos pendentes para os próximos sete dias
+// V7.51 — resumo financeiro da semana atual
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.50")
+        put("appVersion", "V7.51")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -335,6 +335,19 @@ private fun sameDayOffset(time: Long, offset: Int): Boolean {
     return target.get(Calendar.YEAR) == value.get(Calendar.YEAR) &&
         target.get(Calendar.DAY_OF_YEAR) == value.get(Calendar.DAY_OF_YEAR)
 }
+private fun isInCurrentWeek(time: Long): Boolean {
+    val start = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
+    }
+    val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 7) }
+    return time >= start.timeInMillis && time < end.timeInMillis
+}
+
 private fun inNextSevenDays(time: Long): Boolean {
     val start = Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 0)
@@ -712,6 +725,23 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val upcomingReceivableValue = upcomingReceivableOrders.sumOf {
         (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0)
     }
+    val weeklySales = sales.filter { isInCurrentWeek(it.date) }
+    val weeklyExpenses = expenses.filter { isInCurrentWeek(it.date) }
+    val weeklyPayments = payments.filter { isInCurrentWeek(it.date) }
+    val weeklyDeliveredOrders = orders.filter {
+        it.status == "Entregue" && isInCurrentWeek(it.deliveryDate)
+    }
+    val weeklySalesRevenue = weeklySales.sumOf { it.quantity * it.unitValue }
+    val weeklySalesCost = weeklySales.sumOf { it.quantity * it.unitCost }
+    val weeklyOrderRevenue = weeklyDeliveredOrders.sumOf { it.totalValue }
+    val weeklyOrderCost = weeklyDeliveredOrders.sumOf { it.quantity * it.unitCost }
+    val weeklyRevenue = weeklySalesRevenue + weeklyOrderRevenue
+    val weeklyCost = weeklySalesCost + weeklyOrderCost
+    val weeklyGrossProfit = weeklyRevenue - weeklyCost
+    val weeklyExpenseTotal = weeklyExpenses.sumOf { it.value }
+    val weeklyNetProfit = weeklyGrossProfit - weeklyExpenseTotal
+    val weeklyCashIn = weeklySalesRevenue + weeklyPayments.sumOf { it.amount }
+    val weeklyCashBalance = weeklyCashIn - weeklyExpenseTotal
     val normalizedOrderSearch = normalizeSearch(orderSearch)
     val filteredVisibleOrders = filteredOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
@@ -815,7 +845,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.50") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.51") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -896,6 +926,22 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("A receber dessas encomendas: R$ %.2f".format(todayReceivable))
                             Text("Percentual já recebido: %.2f%%".format(todayCollectionRate))
                             Text("Ticket médio de hoje: R$ %.2f".format(todayAverageTicket))
+                        }
+                    }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("📆 Resumo financeiro da semana", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento da semana: R$ %.2f".format(weeklyRevenue))
+                            Text("Custos de entrada: R$ %.2f".format(weeklyCost))
+                            Text("Lucro bruto: R$ %.2f".format(weeklyGrossProfit))
+                            Text("Despesas: R$ %.2f".format(weeklyExpenseTotal))
+                            Text("Resultado líquido estimado: R$ %.2f".format(weeklyNetProfit))
+                            Text("Recebimentos registrados: R$ %.2f".format(weeklyPayments.sumOf { it.amount }))
+                            Text("Entradas de caixa: R$ %.2f".format(weeklyCashIn))
+                            Text("Saldo de caixa da semana: R$ %.2f".format(weeklyCashBalance))
+                            Text("Encomendas entregues: ${weeklyDeliveredOrders.size} • Vendas diretas: ${weeklySales.size}")
+                            Text("Período: segunda-feira a domingo.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
