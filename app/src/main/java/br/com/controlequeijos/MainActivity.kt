@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.48 — bloqueio automático por PIN ao sair do aplicativo
+// V7.49 — painel da fila de produção com unidades e valor pendente
 
 import android.content.Context
 import android.os.Bundle
@@ -702,6 +702,8 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val dueTodayOrders = pendingOrders.filter { sameDay(it.deliveryDate) }
     val deliveredOrdersCount = activeOrders.count { it.status == "Entregue" }
     val productionOrders = activeOrders.filter { it.status == "Em produção" }
+    val productionOrderUnits = productionOrders.sumOf { it.quantity }
+    val productionOrderValue = productionOrders.sumOf { it.totalValue }
     val normalizedOrderSearch = normalizeSearch(orderSearch)
     val filteredVisibleOrders = filteredOrders.filter { o ->
         val matchesFilter = when (orderFilter) {
@@ -860,6 +862,14 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                     val todayTicketValue = todayOrderValue + todayDirectSalesRevenue
                     val todayAverageTicket = if (todayTicketBase > 0) todayTicketValue / todayTicketBase else 0.0
 
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("🏭 Fila de produção", style = MaterialTheme.typography.titleMedium)
+                            Text("Encomendas em produção: ${productionOrders.size}")
+                            Text("Unidades em produção: $productionOrderUnits")
+                            Text("Valor das encomendas em produção: R$ %.2f".format(productionOrderValue))
+                        }
+                    }
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("📅 Resumo de hoje", style = MaterialTheme.typography.titleMedium)
