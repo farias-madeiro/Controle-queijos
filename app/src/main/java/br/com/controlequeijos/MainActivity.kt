@@ -902,7 +902,8 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Resumo da semana", style = MaterialTheme.typography.titleMedium)
-                            Text("Encomendas: ${weekOrders.size} • Em aberto: ${weekOrders.count { it.status != \"Entregue\" && it.status != \"Cancelada\" }}")
+                            val openWeekOrders = weekOrders.count { it.status != "Entregue" && it.status != "Cancelada" }
+                            Text("Encomendas: ${weekOrders.size} • Em aberto: $openWeekOrders")
                             Text("Valor previsto: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { it.totalValue }))
                             Text("A receber: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
                         }
