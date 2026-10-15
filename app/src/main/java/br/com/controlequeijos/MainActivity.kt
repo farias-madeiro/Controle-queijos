@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.53 — abas de encomendas da semana, faturamento semanal e histórico
+// V7.54 — busca e filtros dedicados no histórico de encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.53")
+        put("appVersion", "V7.54")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -335,6 +335,17 @@ private fun sameDayOffset(time: Long, offset: Int): Boolean {
     return target.get(Calendar.YEAR) == value.get(Calendar.YEAR) &&
         target.get(Calendar.DAY_OF_YEAR) == value.get(Calendar.DAY_OF_YEAR)
 }
+private fun isWithinLastDays(time: Long, days: Int): Boolean {
+    val start = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        add(Calendar.DAY_OF_YEAR, -(days - 1))
+    }
+    return time >= start.timeInMillis && time <= System.currentTimeMillis()
+}
+private fun isInCurrentYear(time: Long): Boolean {
+    val target = Calendar.getInstance().apply { timeInMillis = time }
+    return target.get(Calendar.YEAR) == Calendar.getInstance().get(Calendar.YEAR)
+}
 private fun isInCurrentWeek(time: Long): Boolean {
     val start = Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 0)
@@ -395,6 +406,9 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     var orderFilter by remember { mutableStateOf("Todas") }
     var orderSearch by remember { mutableStateOf("") }
     var orderSort by remember { mutableStateOf("Entrega") }
+    var historySearch by remember { mutableStateOf("") }
+    var historyStatus by remember { mutableStateOf("Todas") }
+    var historyPeriod by remember { mutableStateOf("Todos") }
     var clientSearch by remember { mutableStateOf("") }
     var clientFilter by remember { mutableStateOf("Todos") }
     var productSearch by remember { mutableStateOf("") }
@@ -760,22 +774,47 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val monthlyCashIn = monthlySalesRevenue + monthlyPayments.sumOf { it.amount }
     val monthlyCashBalance = monthlyCashIn - monthlyExpenseTotal
     val normalizedOrderSearch = normalizeSearch(orderSearch)
+    val normalizedHistorySearch = normalizeSearch(historySearch)
     val ordersForListing = when (selectedTab) {
         9 -> orders.filter { isInCurrentWeek(it.deliveryDate) }
         11 -> orders.filter { it.status == "Entregue" || it.status == "Cancelada" || (!isInCurrentWeek(it.deliveryDate) && isOverdue(it.deliveryDate)) }
         else -> filteredOrders
     }
     val filteredVisibleOrders = ordersForListing.filter { o ->
-        val matchesFilter = when (orderFilter) {
-            "Pendentes" -> o.status == "Pendente"
-            "Em produção" -> o.status == "Em produção"
-            "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue" && o.status != "Cancelada"
-            "Atrasadas" -> isDeliveryOverdue(o)
-            "Entregues" -> o.status == "Entregue"
-            "Canceladas" -> o.status == "Cancelada"
+        val matchesFilter = if (selectedTab == 11) {
+            when (historyStatus) {
+                "Pendentes" -> o.status == "Pendente"
+                "Em produção" -> o.status == "Em produção"
+                "Entregues" -> o.status == "Entregue"
+                "Canceladas" -> o.status == "Cancelada"
+                "Atrasadas" -> isDeliveryOverdue(o)
+                else -> true
+            }
+        } else {
+            when (orderFilter) {
+                "Pendentes" -> o.status == "Pendente"
+                "Em produção" -> o.status == "Em produção"
+                "Hoje" -> sameDay(o.deliveryDate) && o.status != "Entregue" && o.status != "Cancelada"
+                "Atrasadas" -> isDeliveryOverdue(o)
+                "Entregues" -> o.status == "Entregue"
+                "Canceladas" -> o.status == "Cancelada"
+                else -> true
+            }
+        }
+        val matchesSearch = if (selectedTab == 11) {
+            normalizedHistorySearch.isBlank() || normalizeSearch(o.customerName).contains(normalizedHistorySearch) ||
+                normalizeSearch(o.productName).contains(normalizedHistorySearch) || o.id.toString().contains(normalizedHistorySearch)
+        } else {
+            normalizedOrderSearch.isBlank() || normalizeSearch(o.customerName).contains(normalizedOrderSearch) ||
+                normalizeSearch(o.productName).contains(normalizedOrderSearch)
+        }
+        val matchesHistoryPeriod = selectedTab != 11 || when (historyPeriod) {
+            "30 dias" -> isWithinLastDays(o.orderDate, 30)
+            "90 dias" -> isWithinLastDays(o.orderDate, 90)
+            "Este ano" -> isInCurrentYear(o.orderDate)
             else -> true
         }
-        matchesFilter && (normalizedOrderSearch.isBlank() || normalizeSearch(o.customerName).contains(normalizedOrderSearch) || normalizeSearch(o.productName).contains(normalizedOrderSearch))
+        matchesFilter && matchesSearch && matchesHistoryPeriod
     }
     val visibleOrders = when (orderSort) {
         "Cliente" -> filteredVisibleOrders.sortedBy { normalizeSearch(it.customerName) }
@@ -867,7 +906,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.53") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.54") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2063,17 +2102,41 @@ if (selectedTab == 2 || selectedTab == 9 || selectedTab == 11) item {
                             Text("Recebido: R$ %.2f • A receber: R$ %.2f".format(activeOrders.sumOf { effectivePaid(it, payments) }, activeOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
                         }
                     }
-                    OutlinedTextField(
-                        value = orderSearch,
-                        onValueChange = { orderSearch = it },
-                        label = { Text("Buscar cliente ou produto") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Todas", "Pendentes", "Em produção", "Hoje", "Amanhã", "7 dias", "Atrasadas", "Entregues", "Canceladas").forEach { f ->
-                            if (orderFilter == f) Button(onClick = { orderFilter = f }) { Text(f) }
-                            else OutlinedButton(onClick = { orderFilter = f }) { Text(f) }
+                    if (selectedTab == 11) {
+                        OutlinedTextField(
+                            value = historySearch,
+                            onValueChange = { historySearch = it },
+                            label = { Text("Buscar cliente, produto ou nº da encomenda") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text("Situação", style = MaterialTheme.typography.labelLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("Todas", "Pendentes", "Em produção", "Entregues", "Canceladas", "Atrasadas").forEach { f ->
+                                if (historyStatus == f) Button(onClick = { historyStatus = f }) { Text(f) }
+                                else OutlinedButton(onClick = { historyStatus = f }) { Text(f) }
+                            }
+                        }
+                        Text("Período da encomenda", style = MaterialTheme.typography.labelLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("Todos", "30 dias", "90 dias", "Este ano").forEach { p ->
+                                if (historyPeriod == p) Button(onClick = { historyPeriod = p }) { Text(p) }
+                                else OutlinedButton(onClick = { historyPeriod = p }) { Text(p) }
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = orderSearch,
+                            onValueChange = { orderSearch = it },
+                            label = { Text("Buscar cliente ou produto") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("Todas", "Pendentes", "Em produção", "Hoje", "Amanhã", "7 dias", "Atrasadas", "Entregues", "Canceladas").forEach { f ->
+                                if (orderFilter == f) Button(onClick = { orderFilter = f }) { Text(f) }
+                                else OutlinedButton(onClick = { orderFilter = f }) { Text(f) }
+                            }
                         }
                     }
                     Text("Exibindo: " + visibleOrders.size + " encomenda(s)")
