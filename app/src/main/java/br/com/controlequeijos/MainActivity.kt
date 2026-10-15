@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.52 — resumo financeiro do mês atual
+// V7.53 — abas de encomendas da semana, faturamento semanal e histórico
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.52")
+        put("appVersion", "V7.53")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -412,7 +412,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     var selectedTab by remember { mutableStateOf(0) }
     var pendingPdfText by remember { mutableStateOf("") }
     var pendingCsvText by remember { mutableStateOf("") }
-    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização", "💳 A Receber")
+    val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização", "💳 A Receber", "📅 Semana", "🧾 Faturamento semanal", "📚 Histórico")
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     var hasPin by remember { mutableStateOf(prefs.getString(PIN_HASH, null).orEmpty().isNotBlank()) }
     var isUnlocked by remember { mutableStateOf(!hasPin) }
@@ -760,7 +760,12 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val monthlyCashIn = monthlySalesRevenue + monthlyPayments.sumOf { it.amount }
     val monthlyCashBalance = monthlyCashIn - monthlyExpenseTotal
     val normalizedOrderSearch = normalizeSearch(orderSearch)
-    val filteredVisibleOrders = filteredOrders.filter { o ->
+    val ordersForListing = when (selectedTab) {
+        9 -> orders.filter { isInCurrentWeek(it.deliveryDate) }
+        11 -> orders.filter { it.status == "Entregue" || it.status == "Cancelada" || (!isInCurrentWeek(it.deliveryDate) && isOverdue(it.deliveryDate)) }
+        else -> filteredOrders
+    }
+    val filteredVisibleOrders = ordersForListing.filter { o ->
         val matchesFilter = when (orderFilter) {
             "Pendentes" -> o.status == "Pendente"
             "Em produção" -> o.status == "Em produção"
@@ -779,11 +784,11 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
         else -> filteredVisibleOrders.sortedWith(compareBy<Order> { if (it.status == "Pendente") 0 else 1 }.thenBy { it.deliveryDate }.thenBy { it.customerName.lowercase(Locale.getDefault()) })
     }
     val orderStatusCounts = mapOf(
-        "Pendentes" to filteredOrders.count { it.status == "Pendente" },
-        "Em produção" to filteredOrders.count { it.status == "Em produção" },
-        "Entregues" to filteredOrders.count { it.status == "Entregue" },
-        "Canceladas" to filteredOrders.count { it.status == "Cancelada" },
-        "Atrasadas" to filteredOrders.count { it.status != "Entregue" && it.status != "Cancelada" && isOverdue(it.deliveryDate) }
+        "Pendentes" to ordersForListing.count { it.status == "Pendente" },
+        "Em produção" to ordersForListing.count { it.status == "Em produção" },
+        "Entregues" to ordersForListing.count { it.status == "Entregue" },
+        "Canceladas" to ordersForListing.count { it.status == "Cancelada" },
+        "Atrasadas" to ordersForListing.count { it.status != "Entregue" && it.status != "Cancelada" && isOverdue(it.deliveryDate) }
     )
     val pendingOrdersValue = pendingOrders.sumOf { it.totalValue }
     val clientsWithBalance = activeOrders.filter { (it.totalValue - effectivePaid(it, payments)) > 0.005 }.map { it.customerName.trim().lowercase(Locale.getDefault()) }.toSet().size
@@ -862,7 +867,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.52") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.53") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -889,6 +894,50 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             )
                         }
                     }
+                }
+                if (selectedTab == 9) item {
+                    Text("📅 Encomendas da semana", style = MaterialTheme.typography.headlineSmall)
+                    Text("Lista organizada pela data prevista de entrega, de segunda a domingo. Os registros e status originais são preservados.", style = MaterialTheme.typography.bodyMedium)
+                    val weekOrders = orders.filter { isInCurrentWeek(it.deliveryDate) }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Resumo da semana", style = MaterialTheme.typography.titleMedium)
+                            Text("Encomendas: ${weekOrders.size} • Em aberto: ${weekOrders.count { it.status != \"Entregue\" && it.status != \"Cancelada\" }}")
+                            Text("Valor previsto: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { it.totalValue }))
+                            Text("A receber: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
+                        }
+                    }
+                }
+                if (selectedTab == 10) item {
+                    Text("🧾 Faturamento semanal", style = MaterialTheme.typography.headlineSmall)
+                    Text("Os valores são separados pela data correspondente para não misturar vendas, entregas e recebimentos.", style = MaterialTheme.typography.bodyMedium)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Faturamento da semana", style = MaterialTheme.typography.titleMedium)
+                            Text("Vendas diretas registradas: R$ %.2f".format(weeklySalesRevenue))
+                            Text("Encomendas entregues nesta semana: R$ %.2f".format(weeklyOrderRevenue))
+                            Text("Faturamento total: R$ %.2f".format(weeklyRevenue))
+                            Text("Custos das vendas e encomendas entregues: R$ %.2f".format(weeklyCost))
+                            Text("Lucro bruto estimado: R$ %.2f".format(weeklyGrossProfit))
+                            Text("Despesas registradas na semana: R$ %.2f".format(weeklyExpenseTotal))
+                            Text("Resultado estimado após despesas: R$ %.2f".format(weeklyNetProfit))
+                        }
+                    }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Movimentação de dinheiro na semana", style = MaterialTheme.typography.titleMedium)
+                            Text("Recebimentos registrados nesta semana: R$ %.2f".format(weeklyPayments.sumOf { it.amount }))
+                            Text("Vendas diretas registradas nesta semana: R$ %.2f".format(weeklySalesRevenue))
+                            Text("Entradas consideradas no caixa: R$ %.2f".format(weeklyCashIn))
+                            Text("Despesas da semana: R$ %.2f".format(weeklyExpenseTotal))
+                            Text("Saldo estimado do período: R$ %.2f".format(weeklyCashBalance))
+                        }
+                    }
+                    Text("A semana considera segunda-feira a domingo. Encomendas são contabilizadas no faturamento quando marcadas como entregues, pela data de entrega; recebimentos e despesas usam suas próprias datas.", style = MaterialTheme.typography.bodySmall)
+                }
+                if (selectedTab == 11) item {
+                    Text("📚 Histórico de encomendas", style = MaterialTheme.typography.headlineSmall)
+                    Text("Consulte encomendas entregues, canceladas e encomendas com data de entrega passada. Use a busca e os filtros abaixo para localizar registros antigos.", style = MaterialTheme.typography.bodyMedium)
                 }
                 if (selectedTab == 0) item {
                     Text("Painel de controle", style = MaterialTheme.typography.headlineSmall)
@@ -1786,7 +1835,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                         Text(backupMessage)
                     }
                 }
-                item {
+                if (selectedTab == 2 || selectedTab == 5) item {
                     Text("Período", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("Todos", "Hoje", "Amanhã", "Próximos 7 dias", "Mês").forEach { p ->
@@ -1996,9 +2045,9 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                         }
                     }
                 }
-if (selectedTab == 2) item {
-                    Text("Encomendas", style = MaterialTheme.typography.headlineSmall)
-                    val activeOrders = orders.filter { it.status != "Cancelada" }
+if (selectedTab == 2 || selectedTab == 9 || selectedTab == 11) item {
+                    Text(if (selectedTab == 9) "Encomendas da semana" else if (selectedTab == 11) "Histórico de encomendas" else "Encomendas", style = MaterialTheme.typography.headlineSmall)
+                    val activeOrders = ordersForListing.filter { it.status != "Cancelada" }
                     val overdueCount = activeOrders.count { isDeliveryOverdue(it) }
                     val todayCount = activeOrders.count { it.status != "Entregue" && sameDay(it.deliveryDate) }
                     val tomorrowCount = activeOrders.count { it.status != "Entregue" && sameDayOffset(it.deliveryDate, 1) }
@@ -2040,8 +2089,8 @@ if (selectedTab == 2) item {
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                if (selectedTab == 2 && visibleOrders.isEmpty()) item { Text("Nenhuma encomenda encontrada.") }
-                if (selectedTab == 2) items(visibleOrders, key = { it.id }) { o ->
+                if ((selectedTab == 2 || selectedTab == 9 || selectedTab == 11) && visibleOrders.isEmpty()) item { Text(if (selectedTab == 11) "Nenhuma encomenda no histórico para os filtros escolhidos." else "Nenhuma encomenda encontrada.") }
+                if (selectedTab == 2 || selectedTab == 9 || selectedTab == 11) items(visibleOrders, key = { it.id }) { o ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(o.customerName, style = MaterialTheme.typography.titleMedium)
