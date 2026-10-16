@@ -2140,6 +2140,32 @@ if (selectedTab == 2 || selectedTab == 9 || selectedTab == 11) item {
                         }
                     }
                     Text("Exibindo: " + visibleOrders.size + " encomenda(s)")
+                    OutlinedButton(
+                        onClick = {
+                            val report = buildString {
+                                appendLine("CONTROLE-QUEIJOS — RESUMO DO HISTÓRICO")
+                                appendLine("Encomendas incluídas: ${visibleOrders.size}")
+                                appendLine("Unidades: ${visibleOrders.sumOf { it.quantity }}")
+                                appendLine("Valor total: R$ %.2f".format(visibleOrders.sumOf { it.totalValue }))
+                                appendLine("Recebido: R$ %.2f".format(visibleOrders.sumOf { effectivePaid(it, payments) }))
+                                appendLine("A receber: R$ %.2f".format(visibleOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
+                                appendLine()
+                                appendLine("TOTAIS POR PRODUTO (sem nomes de clientes)")
+                                visibleOrders.groupBy { it.productName }.toSortedMap().forEach { (product, productOrders) ->
+                                    val units = productOrders.sumOf { it.quantity }
+                                    val total = productOrders.sumOf { it.totalValue }
+                                    val received = productOrders.sumOf { effectivePaid(it, payments) }
+                                    val balance = productOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+                                    appendLine("$product — ${productOrders.size} encomenda(s), $units un., total R$ %.2f, recebido R$ %.2f, a receber R$ %.2f".format(total, received, balance))
+                                }
+                            }
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }, "Compartilhar resumo do histórico").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Compartilhar resumo filtrado (sem nomes de clientes)") }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                         listOf("Entrega", "Mais recentes", "Cliente", "Produto").forEach { s ->
                             if (orderSort == s) Button(onClick = { orderSort = s }) { Text(s) }
