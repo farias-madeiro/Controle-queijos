@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.57 — detalhamento semanal do custo de entrada e saldo das encomendas entregues
+// V7.58 — detalhamento semanal do custo de entrada e saldo das encomendas entregues
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.57")
+        put("appVersion", "V7.58")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -357,6 +357,19 @@ private fun isInCurrentWeek(time: Long): Boolean {
     }
     val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 7) }
     return time >= start.timeInMillis && time < end.timeInMillis
+}
+
+private fun isInPreviousWeek(time: Long): Boolean {
+    val currentStart = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
+    }
+    val previousStart = (currentStart.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -7) }
+    return time >= previousStart.timeInMillis && time < currentStart.timeInMillis
 }
 
 private fun inNextSevenDays(time: Long): Boolean {
@@ -757,6 +770,14 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val weeklyGrossProfit = weeklyRevenue - weeklyCost
     val weeklyExpenseTotal = weeklyExpenses.sumOf { it.value }
     val weeklyNetProfit = weeklyGrossProfit - weeklyExpenseTotal
+    val previousWeekSales = sales.filter { isInPreviousWeek(it.date) }
+    val previousWeekExpenses = expenses.filter { isInPreviousWeek(it.date) }
+    val previousWeekOrders = orders.filter { it.status == "Entregue" && isInPreviousWeek(it.deliveryDate) }
+    val previousWeekRevenue = previousWeekSales.sumOf { it.quantity * it.unitValue } + previousWeekOrders.sumOf { it.totalValue }
+    val previousWeekCost = previousWeekSales.sumOf { it.quantity * it.unitCost } + previousWeekOrders.sumOf { it.quantity * it.unitCost }
+    val previousWeekGrossProfit = previousWeekRevenue - previousWeekCost
+    val previousWeekExpenseTotal = previousWeekExpenses.sumOf { it.value }
+    val previousWeekNetProfit = previousWeekGrossProfit - previousWeekExpenseTotal
     val weeklyCashIn = weeklySalesRevenue + weeklyPayments.sumOf { it.amount }
     val weeklyCashBalance = weeklyCashIn - weeklyExpenseTotal
     val monthlySales = sales.filter { sameMonth(it.date) }
@@ -909,7 +930,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.57") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.58") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -968,6 +989,16 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("Lucro bruto estimado total: R$ %.2f".format(weeklyGrossProfit))
                             Text("Despesas registradas na semana: R$ %.2f".format(weeklyExpenseTotal))
                             Text("Resultado estimado após despesas: R$ %.2f".format(weeklyNetProfit))
+                        }
+                    }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Comparativo com a semana anterior", style = MaterialTheme.typography.titleMedium)
+                            Text("Faturamento: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyRevenue, previousWeekRevenue, weeklyRevenue - previousWeekRevenue))
+                            Text("Lucro bruto: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyGrossProfit, previousWeekGrossProfit, weeklyGrossProfit - previousWeekGrossProfit))
+                            Text("Despesas: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyExpenseTotal, previousWeekExpenseTotal, weeklyExpenseTotal - previousWeekExpenseTotal))
+                            Text("Resultado após despesas: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyNetProfit, previousWeekNetProfit, weeklyNetProfit - previousWeekNetProfit))
+                            Text("A semana anterior considera segunda-feira a domingo, imediatamente antes da semana atual.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Card(Modifier.fillMaxWidth()) {
