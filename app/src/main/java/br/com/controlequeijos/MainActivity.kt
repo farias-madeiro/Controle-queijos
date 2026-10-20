@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.54 — busca e filtros dedicados no histórico de encomendas
+// V7.57 — detalhamento semanal do custo de entrada e saldo das encomendas entregues
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.54")
+        put("appVersion", "V7.57")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -749,6 +749,9 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val weeklySalesCost = weeklySales.sumOf { it.quantity * it.unitCost }
     val weeklyOrderRevenue = weeklyDeliveredOrders.sumOf { it.totalValue }
     val weeklyOrderCost = weeklyDeliveredOrders.sumOf { it.quantity * it.unitCost }
+    val weeklyOrderReceived = weeklyDeliveredOrders.sumOf { effectivePaid(it, payments) }
+    val weeklyOrderReceivable = weeklyDeliveredOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+    val weeklyOrderGrossProfit = weeklyOrderRevenue - weeklyOrderCost
     val weeklyRevenue = weeklySalesRevenue + weeklyOrderRevenue
     val weeklyCost = weeklySalesCost + weeklyOrderCost
     val weeklyGrossProfit = weeklyRevenue - weeklyCost
@@ -906,7 +909,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.54") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.57") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -957,8 +960,12 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("Vendas diretas registradas: R$ %.2f".format(weeklySalesRevenue))
                             Text("Encomendas entregues nesta semana: R$ %.2f".format(weeklyOrderRevenue))
                             Text("Faturamento total: R$ %.2f".format(weeklyRevenue))
+                            Text("Custo de entrada das encomendas entregues: R$ %.2f".format(weeklyOrderCost))
+                            Text("Lucro bruto das encomendas: R$ %.2f".format(weeklyOrderGrossProfit))
+                            Text("Recebido das encomendas entregues: R$ %.2f".format(weeklyOrderReceived))
+                            Text("A receber das encomendas entregues: R$ %.2f".format(weeklyOrderReceivable))
                             Text("Custos das vendas e encomendas entregues: R$ %.2f".format(weeklyCost))
-                            Text("Lucro bruto estimado: R$ %.2f".format(weeklyGrossProfit))
+                            Text("Lucro bruto estimado total: R$ %.2f".format(weeklyGrossProfit))
                             Text("Despesas registradas na semana: R$ %.2f".format(weeklyExpenseTotal))
                             Text("Resultado estimado após despesas: R$ %.2f".format(weeklyNetProfit))
                         }
