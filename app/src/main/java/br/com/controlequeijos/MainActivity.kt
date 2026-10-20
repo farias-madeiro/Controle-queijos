@@ -2158,6 +2158,15 @@ if (selectedTab == 2 || selectedTab == 9 || selectedTab == 11) item {
                                     val balance = productOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
                                     appendLine("$product — ${productOrders.size} encomenda(s), $units un., total R$ %.2f, recebido R$ %.2f, a receber R$ %.2f".format(total, received, balance))
                                 }
+                                appendLine()
+                                appendLine("RESUMO POR DATA DE ENTREGA")
+                                visibleOrders.groupBy { dateOnly(it.deliveryDate) }.toSortedMap().forEach { (deliveryDate, dateOrders) ->
+                                    val units = dateOrders.sumOf { it.quantity }
+                                    val total = dateOrders.sumOf { it.totalValue }
+                                    val received = dateOrders.sumOf { effectivePaid(it, payments) }
+                                    val balance = dateOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+                                    appendLine("$deliveryDate — ${dateOrders.size} encomenda(s), $units un., total R$ %.2f, recebido R$ %.2f, a receber R$ %.2f".format(total, received, balance))
+                                }
                             }
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
