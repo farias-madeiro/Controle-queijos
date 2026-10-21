@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.64 — extrato do cliente alinhado ao saldo real a receber
+// V7.65 — validação clara ao registrar recebimentos parciais
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.64")
+        put("appVersion", "V7.65")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -3069,6 +3069,7 @@ private fun ClientDialog(
 private fun PaymentDialog(order: Order, payments: List<Payment>, onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
     var value by remember(order) { mutableStateOf("") }
     var note by remember(order) { mutableStateOf("") }
+    var validationError by remember(order) { mutableStateOf("") }
     val remaining = (order.totalValue - effectivePaid(order, payments)).coerceAtLeast(0.0)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3077,14 +3078,21 @@ private fun PaymentDialog(order: Order, payments: List<Payment>, onDismiss: () -
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Cliente: " + order.customerName)
                 Text("Saldo atual: R$ %.2f".format(remaining))
-                OutlinedTextField(value, { value = it.replace(",", ".") }, label = { Text("Valor recebido") }, singleLine = true)
+                OutlinedTextField(value, { value = it.replace(",", "."); validationError = "" }, label = { Text("Valor recebido") }, singleLine = true)
                 OutlinedTextField(note, { note = it }, label = { Text("Observação (opcional)") }, singleLine = true)
+                if (validationError.isNotBlank()) {
+                    Text(validationError, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
             Button(onClick = {
-                val amount = value.toDoubleOrNull() ?: 0.0
-                if (amount > 0 && amount <= remaining + 0.005) onSave(amount, note.trim())
+                val amount = value.toDoubleOrNull()
+                when {
+                    amount == null || amount <= 0.0 -> validationError = "Informe um valor recebido maior que zero."
+                    amount > remaining + 0.005 -> validationError = "O valor não pode ser maior que o saldo pendente."
+                    else -> onSave(amount, note.trim())
+                }
             }) { Text("Registrar") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
