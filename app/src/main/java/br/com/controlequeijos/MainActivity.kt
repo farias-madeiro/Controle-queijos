@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.60 — navegação entre semanas no resumo, faturamento e encomendas
+// V7.61 — conferência semanal de recebimentos e saldos pendentes
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.60")
+        put("appVersion", "V7.61")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -936,7 +936,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.60") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.61") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -976,10 +976,19 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Resumo da semana", style = MaterialTheme.typography.titleMedium)
-                            val openWeekOrders = weekOrders.count { it.status != "Entregue" && it.status != "Cancelada" }
+                            val activeWeekOrders = weekOrders.filter { it.status != "Cancelada" }
+                            val openWeekOrders = activeWeekOrders.count { it.status != "Entregue" }
+                            val weekExpected = activeWeekOrders.sumOf { it.totalValue }
+                            val weekReceived = activeWeekOrders.sumOf { effectivePaid(it, payments).coerceAtMost(it.totalValue) }
+                            val weekReceivable = activeWeekOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+                            val deliveredWithBalance = activeWeekOrders.count { it.status == "Entregue" && (it.totalValue - effectivePaid(it, payments)) > 0.009 }
+                            val collectionRate = if (weekExpected > 0.0) (weekReceived / weekExpected * 100.0).coerceIn(0.0, 100.0) else 0.0
                             Text("Encomendas: ${weekOrders.size} • Em aberto: $openWeekOrders")
-                            Text("Valor previsto: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { it.totalValue }))
-                            Text("A receber: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
+                            Text("Valor previsto: R$ %.2f".format(weekExpected))
+                            Text("Recebido: R$ %.2f".format(weekReceived))
+                            Text("A receber: R$ %.2f".format(weekReceivable))
+                            Text("Entregues com saldo: $deliveredWithBalance")
+                            Text("Percentual recebido: %.1f%%".format(collectionRate))
                         }
                     }
                     OutlinedButton(onClick = {
@@ -993,10 +1002,21 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             appendLine("CONTROLE QUEIJOS — RELATÓRIO SEMANAL")
                             appendLine(weekRangeLabel(selectedWeekOffset))
                             appendLine()
+                            val activeWeekOrders = weekOrders.filter { it.status != "Cancelada" }
+                            val weekExpected = activeWeekOrders.sumOf { it.totalValue }
+                            val weekReceived = activeWeekOrders.sumOf { effectivePaid(it, payments).coerceAtMost(it.totalValue) }
+                            val weekReceivable = activeWeekOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+                            val deliveredWithBalance = activeWeekOrders.count { it.status == "Entregue" && (it.totalValue - effectivePaid(it, payments)) > 0.009 }
+                            val collectionRate = if (weekExpected > 0.0) (weekReceived / weekExpected * 100.0).coerceIn(0.0, 100.0) else 0.0
                             appendLine("Encomendas no período: ${weekOrders.size}")
-                            appendLine("Em aberto: ${weekOrders.count { it.status != "Entregue" && it.status != "Cancelada" }}")
+                            appendLine("Em aberto: ${activeWeekOrders.count { it.status != "Entregue" }}")
                             appendLine("Entregues: ${weekOrders.count { it.status == "Entregue" }}")
                             appendLine("Canceladas: ${weekOrders.count { it.status == "Cancelada" }}")
+                            appendLine("Valor previsto das encomendas ativas: R$ %.2f".format(weekExpected))
+                            appendLine("Recebido das encomendas: R$ %.2f".format(weekReceived))
+                            appendLine("Saldo a receber: R$ %.2f".format(weekReceivable))
+                            appendLine("Entregues com saldo pendente: $deliveredWithBalance")
+                            appendLine("Percentual recebido: %.1f%%".format(collectionRate))
                             appendLine()
                             appendLine("QUANTIDADES POR PRODUTO")
                             if (productSummary.isEmpty()) appendLine("Nenhuma encomenda ativa no período.")
