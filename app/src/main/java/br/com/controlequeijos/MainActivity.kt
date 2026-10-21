@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.61 — conferência semanal de recebimentos e saldos pendentes
+// V7.62 — percentual recebido por cliente com saldo em aberto
 
 import android.content.Context
 import android.os.Bundle
@@ -1872,7 +1872,11 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
         val overdueReceivable = openReceivables.filter { isDeliveryOverdue(it) }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
         val deliveredReceivable = openReceivables.filter { it.status == "Entregue" }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
         val receivableByClient = openReceivables.groupBy { normalizeSearch(it.customerName) }.map { (_, group) ->
-            group.first().customerName.trim() to group.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+            val balance = group.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+            val total = group.sumOf { it.totalValue.coerceAtLeast(0.0) }
+            val received = group.sumOf { it.paidValue.coerceAtLeast(0.0) }
+            val percentReceived = if (total > 0.005) (received / total * 100.0).coerceIn(0.0, 100.0) else 0.0
+            Triple(group.first().customerName.trim(), balance, percentReceived)
         }.sortedByDescending { it.second }
 
         Text("💳 Contas a Receber", style = MaterialTheme.typography.headlineSmall)
@@ -1898,11 +1902,14 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
             }
         }
         Text("Por cliente", style = MaterialTheme.typography.titleMedium)
-        if (receivableByClient.isEmpty()) Text("Nenhum cliente com saldo em aberto.") else receivableByClient.take(20).forEach { (name, balance) ->
+        if (receivableByClient.isEmpty()) Text("Nenhum cliente com saldo em aberto.") else receivableByClient.take(20).forEach { (name, balance, percentReceived) ->
             Card(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(name, modifier = Modifier.weight(1f))
-                    Text("R$ %.2f".format(balance), style = MaterialTheme.typography.titleMedium)
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(name, modifier = Modifier.weight(1f))
+                        Text("R$ %.2f".format(balance), style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text("Recebido nas encomendas em aberto: %.1f%%".format(percentReceived), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
