@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.59 — navegação entre semanas no resumo, faturamento e encomendas
+// V7.60 — navegação entre semanas no resumo, faturamento e encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.59")
+        put("appVersion", "V7.60")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -936,7 +936,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.59") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.60") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -982,6 +982,44 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("A receber: R$ %.2f".format(weekOrders.filter { it.status != "Cancelada" }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }))
                         }
                     }
+                    OutlinedButton(onClick = {
+                        val reportOrders = weekOrders.filter { it.status != "Cancelada" }
+                        val productSummary = reportOrders
+                            .groupBy { normalizeSearch(it.productName) }
+                            .values
+                            .map { group -> group.first().productName.trim() to group.sumOf { it.quantity } }
+                            .sortedBy { normalizeSearch(it.first) }
+                        val weeklyReport = buildString {
+                            appendLine("CONTROLE QUEIJOS — RELATÓRIO SEMANAL")
+                            appendLine(weekRangeLabel(selectedWeekOffset))
+                            appendLine()
+                            appendLine("Encomendas no período: ${weekOrders.size}")
+                            appendLine("Em aberto: ${weekOrders.count { it.status != "Entregue" && it.status != "Cancelada" }}")
+                            appendLine("Entregues: ${weekOrders.count { it.status == "Entregue" }}")
+                            appendLine("Canceladas: ${weekOrders.count { it.status == "Cancelada" }}")
+                            appendLine()
+                            appendLine("QUANTIDADES POR PRODUTO")
+                            if (productSummary.isEmpty()) appendLine("Nenhuma encomenda ativa no período.")
+                            else productSummary.forEach { (name, quantity) -> appendLine("• $name — $quantity un.") }
+                            appendLine()
+                            appendLine("RESUMO FINANCEIRO")
+                            appendLine("Vendas diretas: R$ %.2f".format(weeklySalesRevenue))
+                            appendLine("Encomendas entregues: R$ %.2f".format(weeklyOrderRevenue))
+                            appendLine("Faturamento total: R$ %.2f".format(weeklyRevenue))
+                            appendLine("Custo de entrada: R$ %.2f".format(weeklyCost))
+                            appendLine("Lucro bruto: R$ %.2f".format(weeklyGrossProfit))
+                            appendLine("Despesas: R$ %.2f".format(weeklyExpenseTotal))
+                            appendLine("Resultado após despesas: R$ %.2f".format(weeklyNetProfit))
+                            appendLine("Recebimentos registrados: R$ %.2f".format(weeklyPayments.sumOf { it.amount }))
+                            appendLine("Saldo estimado de caixa: R$ %.2f".format(weeklyCashBalance))
+                            appendLine()
+                            appendLine("Relatório sem nomes de clientes.")
+                        }
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, weeklyReport)
+                        }, "Compartilhar relatório semanal").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Compartilhar relatório semanal (sem nomes)") }
                 }
                 if (selectedTab == 10) item {
                     Text("🧾 Faturamento semanal", style = MaterialTheme.typography.headlineSmall)
