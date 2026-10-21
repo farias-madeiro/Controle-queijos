@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.62 — percentual recebido por cliente com saldo em aberto
+// V7.63 — conferência consistente de recebimentos e saldos em aberto
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.61")
+        put("appVersion", "V7.63")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -1868,13 +1868,13 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
             }
             .sortedWith(compareByDescending<Order> { isDeliveryOverdue(it) }.thenBy { it.deliveryDate })
 
-        val totalReceivable = openReceivables.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
-        val overdueReceivable = openReceivables.filter { isDeliveryOverdue(it) }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
-        val deliveredReceivable = openReceivables.filter { it.status == "Entregue" }.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+        val totalReceivable = openReceivables.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+        val overdueReceivable = openReceivables.filter { isDeliveryOverdue(it) }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
+        val deliveredReceivable = openReceivables.filter { it.status == "Entregue" }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
         val receivableByClient = openReceivables.groupBy { normalizeSearch(it.customerName) }.map { (_, group) ->
-            val balance = group.sumOf { (it.totalValue - it.paidValue).coerceAtLeast(0.0) }
+            val balance = group.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
             val total = group.sumOf { it.totalValue.coerceAtLeast(0.0) }
-            val received = group.sumOf { it.paidValue.coerceAtLeast(0.0) }
+            val received = group.sumOf { effectivePaid(it, payments) }
             val percentReceived = if (total > 0.005) (received / total * 100.0).coerceIn(0.0, 100.0) else 0.0
             Triple(group.first().customerName.trim(), balance, percentReceived)
         }.sortedByDescending { it.second }
@@ -1921,7 +1921,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(order.customerName, style = MaterialTheme.typography.titleMedium)
                     Text(order.productName + " • " + order.quantity + " un.")
-                    Text("Total: R$ %.2f • Pago: R$ %.2f".format(order.totalValue, order.paidValue))
+                    Text("Total: R$ %.2f • Pago: R$ %.2f".format(order.totalValue, effectivePaid(order, payments)))
                     Text("Saldo: R$ %.2f".format(balance) + if (overdue) " • ATRASADA" else " • " + order.status)
                     Text("Entrega: " + dateOnly(order.deliveryDate))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
