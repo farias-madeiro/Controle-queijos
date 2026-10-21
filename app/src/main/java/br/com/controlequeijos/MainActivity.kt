@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.63 — conferência consistente de recebimentos e saldos em aberto
+// V7.64 — extrato do cliente alinhado ao saldo real a receber
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.63")
+        put("appVersion", "V7.64")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -2975,8 +2975,9 @@ private fun buildReportText(period: String, orders: List<Order>): String {
 @Composable
 private fun ClientStatementDialog(client: Client, orders: List<Order>, payments: List<Payment>, onDismiss: () -> Unit) {
     val total = orders.sumOf { it.totalValue }
-    val paid = payments.sumOf { it.amount }
-    val balance = (total - paid).coerceAtLeast(0.0)
+    // Use the same effective-payment rule as Contas a Receber, including initial amounts paid on the order.
+    val paid = orders.sumOf { effectivePaid(it, payments) }
+    val balance = orders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Extrato — " + client.name) },
