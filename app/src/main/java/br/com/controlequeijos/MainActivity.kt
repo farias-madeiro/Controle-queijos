@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.58 — detalhamento semanal do custo de entrada e saldo das encomendas entregues
+// V7.59 — navegação entre semanas no resumo, faturamento e encomendas
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.58")
+        put("appVersion", "V7.59")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -346,31 +346,36 @@ private fun isInCurrentYear(time: Long): Boolean {
     val target = Calendar.getInstance().apply { timeInMillis = time }
     return target.get(Calendar.YEAR) == Calendar.getInstance().get(Calendar.YEAR)
 }
-private fun isInCurrentWeek(time: Long): Boolean {
-    val start = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
-        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
-    }
-    val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 7) }
-    return time >= start.timeInMillis && time < end.timeInMillis
+private fun weekStart(offset: Int = 0): Calendar = Calendar.getInstance().apply {
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+    val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+    add(Calendar.DAY_OF_YEAR, -daysSinceMonday + (offset * 7))
 }
 
-private fun isInPreviousWeek(time: Long): Boolean {
-    val currentStart = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
-        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
-    }
-    val previousStart = (currentStart.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -7) }
-    return time >= previousStart.timeInMillis && time < currentStart.timeInMillis
+private fun isInWeekOffset(time: Long, offset: Int = 0): Boolean {
+    val start = weekStart(offset).timeInMillis
+    val end = weekStart(offset + 1).timeInMillis
+    return time >= start && time < end
 }
+
+private fun weekRangeLabel(offset: Int): String {
+    val start = weekStart(offset)
+    val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 6) }
+    val fmt = SimpleDateFormat("dd/MM", Locale("pt", "BR"))
+    val prefix = when (offset) {
+        0 -> "Semana atual"
+        -1 -> "Semana anterior"
+        1 -> "Próxima semana"
+        else -> "Semana selecionada"
+    }
+    return "$prefix (${fmt.format(start.time)} a ${fmt.format(end.time)})"
+}
+
+private fun isInCurrentWeek(time: Long): Boolean = isInWeekOffset(time, 0)
+private fun isInPreviousWeek(time: Long): Boolean = isInWeekOffset(time, -1)
 
 private fun inNextSevenDays(time: Long): Boolean {
     val start = Calendar.getInstance().apply {
@@ -437,6 +442,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     var lastRestoreBackupAvailable by remember { mutableStateOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).contains(PRE_RESTORE_BACKUP)) }
     var autoBackupAt by remember { mutableStateOf(context.getFileStreamPath(AUTO_BACKUP_FILE).lastModified()) }
     var selectedTab by remember { mutableStateOf(0) }
+    var selectedWeekOffset by remember { mutableIntStateOf(0) }
     var pendingPdfText by remember { mutableStateOf("") }
     var pendingCsvText by remember { mutableStateOf("") }
     val tabTitles = listOf("🏠 Início", "👥 Clientes", "📦 Encomendas", "🚚 Entregas", "🧀 Produção", "💰 Financeiro", "⚙️ Backup", "🔄 Sincronização", "💳 A Receber", "📅 Semana", "🧾 Faturamento semanal", "📚 Histórico")
@@ -752,11 +758,11 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val upcomingReceivableValue = upcomingReceivableOrders.sumOf {
         (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0)
     }
-    val weeklySales = sales.filter { isInCurrentWeek(it.date) }
-    val weeklyExpenses = expenses.filter { isInCurrentWeek(it.date) }
-    val weeklyPayments = payments.filter { isInCurrentWeek(it.date) }
+    val weeklySales = sales.filter { isInWeekOffset(it.date, selectedWeekOffset) }
+    val weeklyExpenses = expenses.filter { isInWeekOffset(it.date, selectedWeekOffset) }
+    val weeklyPayments = payments.filter { isInWeekOffset(it.date, selectedWeekOffset) }
     val weeklyDeliveredOrders = orders.filter {
-        it.status == "Entregue" && isInCurrentWeek(it.deliveryDate)
+        it.status == "Entregue" && isInWeekOffset(it.deliveryDate, selectedWeekOffset)
     }
     val weeklySalesRevenue = weeklySales.sumOf { it.quantity * it.unitValue }
     val weeklySalesCost = weeklySales.sumOf { it.quantity * it.unitCost }
@@ -770,9 +776,9 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val weeklyGrossProfit = weeklyRevenue - weeklyCost
     val weeklyExpenseTotal = weeklyExpenses.sumOf { it.value }
     val weeklyNetProfit = weeklyGrossProfit - weeklyExpenseTotal
-    val previousWeekSales = sales.filter { isInPreviousWeek(it.date) }
-    val previousWeekExpenses = expenses.filter { isInPreviousWeek(it.date) }
-    val previousWeekOrders = orders.filter { it.status == "Entregue" && isInPreviousWeek(it.deliveryDate) }
+    val previousWeekSales = sales.filter { isInWeekOffset(it.date, selectedWeekOffset - 1) }
+    val previousWeekExpenses = expenses.filter { isInWeekOffset(it.date, selectedWeekOffset - 1) }
+    val previousWeekOrders = orders.filter { it.status == "Entregue" && isInWeekOffset(it.deliveryDate, selectedWeekOffset - 1) }
     val previousWeekRevenue = previousWeekSales.sumOf { it.quantity * it.unitValue } + previousWeekOrders.sumOf { it.totalValue }
     val previousWeekCost = previousWeekSales.sumOf { it.quantity * it.unitCost } + previousWeekOrders.sumOf { it.quantity * it.unitCost }
     val previousWeekGrossProfit = previousWeekRevenue - previousWeekCost
@@ -800,7 +806,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val normalizedOrderSearch = normalizeSearch(orderSearch)
     val normalizedHistorySearch = normalizeSearch(historySearch)
     val ordersForListing = when (selectedTab) {
-        9 -> orders.filter { isInCurrentWeek(it.deliveryDate) }
+        9 -> orders.filter { isInWeekOffset(it.deliveryDate, selectedWeekOffset) }
         11 -> orders.filter { it.status == "Entregue" || it.status == "Cancelada" || (!isInCurrentWeek(it.deliveryDate) && isOverdue(it.deliveryDate)) }
         else -> filteredOrders
     }
@@ -930,7 +936,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.58") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.59") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -960,8 +966,13 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                 }
                 if (selectedTab == 9) item {
                     Text("📅 Encomendas da semana", style = MaterialTheme.typography.headlineSmall)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        OutlinedButton(onClick = { selectedWeekOffset = (selectedWeekOffset - 1).coerceAtLeast(-104) }) { Text("◀ Anterior") }
+                        Text(weekRangeLabel(selectedWeekOffset), modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                        OutlinedButton(onClick = { selectedWeekOffset = (selectedWeekOffset + 1).coerceAtMost(104) }) { Text("Próxima ▶") }
+                    }
                     Text("Lista organizada pela data prevista de entrega, de segunda a domingo. Os registros e status originais são preservados.", style = MaterialTheme.typography.bodyMedium)
-                    val weekOrders = orders.filter { isInCurrentWeek(it.deliveryDate) }
+                    val weekOrders = orders.filter { isInWeekOffset(it.deliveryDate, selectedWeekOffset) }
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Resumo da semana", style = MaterialTheme.typography.titleMedium)
@@ -974,6 +985,11 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                 }
                 if (selectedTab == 10) item {
                     Text("🧾 Faturamento semanal", style = MaterialTheme.typography.headlineSmall)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        OutlinedButton(onClick = { selectedWeekOffset = (selectedWeekOffset - 1).coerceAtLeast(-104) }) { Text("◀ Anterior") }
+                        Text(weekRangeLabel(selectedWeekOffset), modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                        OutlinedButton(onClick = { selectedWeekOffset = (selectedWeekOffset + 1).coerceAtMost(104) }) { Text("Próxima ▶") }
+                    }
                     Text("Os valores são separados pela data correspondente para não misturar vendas, entregas e recebimentos.", style = MaterialTheme.typography.bodyMedium)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
