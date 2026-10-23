@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.65 — validação clara ao registrar recebimentos parciais
+// V7.66 — resumo de saldo e quantidade conforme filtro de contas a receber
 
 import android.content.Context
 import android.os.Bundle
@@ -936,7 +936,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.61") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.66") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1867,6 +1867,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                 }
             }
             .sortedWith(compareByDescending<Order> { isDeliveryOverdue(it) }.thenBy { it.deliveryDate })
+        val visibleReceivableTotal = visibleReceivables.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
 
         val totalReceivable = openReceivables.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
         val overdueReceivable = openReceivables.filter { isDeliveryOverdue(it) }.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
@@ -1899,6 +1900,13 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
             listOf("Todos", "Atrasadas", "Pendentes", "Entregues").forEach { filter ->
                 FilterChip(selected = receivableFilter == filter, onClick = { receivableFilter = filter }, label = { Text(filter) })
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Resumo do filtro", style = MaterialTheme.typography.titleMedium)
+                Text("Encomendas encontradas: ${visibleReceivables.size}")
+                Text("Saldo total encontrado: R$ %.2f".format(visibleReceivableTotal), style = MaterialTheme.typography.titleLarge)
             }
         }
         Text("Por cliente", style = MaterialTheme.typography.titleMedium)
@@ -1950,7 +1958,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
 
     if (selectedTab == 6 && userRole == "Administrador") item {            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("✅ Versão estável V7.50", style = MaterialTheme.typography.titleMedium)
+                    Text("✅ Versão V7.66", style = MaterialTheme.typography.titleMedium)
                     Text("Sistema revisado para uso diário: encomendas, entregas, produção, financeiro, clientes, relatórios, PDF, CSV, backup, sincronização e proteção por PIN.")
                     Text("Usuário atual: $userName • Perfil: $userRole", style = MaterialTheme.typography.bodySmall)
                 }
