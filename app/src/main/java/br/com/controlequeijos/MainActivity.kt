@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.68 — custo e lucro estimado também no relatório semanal compartilhado
+// V7.69 — compartilhamento do faturamento semanal com comparativo
 
 import android.content.Context
 import android.os.Bundle
@@ -936,7 +936,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.68") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.69") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1093,6 +1093,40 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             Text("Saldo estimado do período: R$ %.2f".format(weeklyCashBalance))
                         }
                     }
+                    OutlinedButton(onClick = {
+                        val billingReport = buildString {
+                            appendLine("CONTROLE QUEIJOS — FATURAMENTO SEMANAL")
+                            appendLine(weekRangeLabel(selectedWeekOffset))
+                            appendLine()
+                            appendLine("Vendas diretas: R$ %.2f".format(weeklySalesRevenue))
+                            appendLine("Encomendas entregues: R$ %.2f".format(weeklyOrderRevenue))
+                            appendLine("Faturamento total: R$ %.2f".format(weeklyRevenue))
+                            appendLine("Custo de entrada das encomendas entregues: R$ %.2f".format(weeklyOrderCost))
+                            appendLine("Lucro bruto das encomendas: R$ %.2f".format(weeklyOrderGrossProfit))
+                            appendLine("Recebido das encomendas entregues: R$ %.2f".format(weeklyOrderReceived))
+                            appendLine("A receber das encomendas entregues: R$ %.2f".format(weeklyOrderReceivable))
+                            appendLine("Custos de vendas e encomendas entregues: R$ %.2f".format(weeklyCost))
+                            appendLine("Lucro bruto estimado total: R$ %.2f".format(weeklyGrossProfit))
+                            appendLine("Despesas registradas: R$ %.2f".format(weeklyExpenseTotal))
+                            appendLine("Resultado estimado após despesas: R$ %.2f".format(weeklyNetProfit))
+                            appendLine()
+                            appendLine("COMPARATIVO COM A SEMANA ANTERIOR")
+                            appendLine("Faturamento anterior: R$ %.2f".format(previousWeekRevenue))
+                            appendLine("Variação do faturamento: R$ %.2f".format(weeklyRevenue - previousWeekRevenue))
+                            appendLine("Lucro bruto anterior: R$ %.2f".format(previousWeekGrossProfit))
+                            appendLine("Variação do lucro bruto: R$ %.2f".format(weeklyGrossProfit - previousWeekGrossProfit))
+                            appendLine("Despesas anteriores: R$ %.2f".format(previousWeekExpenseTotal))
+                            appendLine("Variação das despesas: R$ %.2f".format(weeklyExpenseTotal - previousWeekExpenseTotal))
+                            appendLine("Resultado após despesas anterior: R$ %.2f".format(previousWeekNetProfit))
+                            appendLine("Variação do resultado: R$ %.2f".format(weeklyNetProfit - previousWeekNetProfit))
+                            appendLine()
+                            appendLine("Relatório financeiro sem nomes de clientes.")
+                        }
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, billingReport)
+                        }, "Compartilhar faturamento semanal").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Compartilhar faturamento semanal") }
                     Text("A semana considera segunda-feira a domingo. Encomendas são contabilizadas no faturamento quando marcadas como entregues, pela data de entrega; recebimentos e despesas usam suas próprias datas.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (selectedTab == 11) item {
@@ -1966,7 +2000,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
 
     if (selectedTab == 6 && userRole == "Administrador") item {            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("✅ Versão V7.68", style = MaterialTheme.typography.titleMedium)
+                    Text("✅ Versão V7.69", style = MaterialTheme.typography.titleMedium)
                     Text("Sistema revisado para uso diário: encomendas, entregas, produção, financeiro, clientes, relatórios, PDF, CSV, backup, sincronização e proteção por PIN.")
                     Text("Usuário atual: $userName • Perfil: $userRole", style = MaterialTheme.typography.bodySmall)
                 }
