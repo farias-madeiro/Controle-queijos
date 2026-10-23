@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.67 — lucro estimado no resumo semanal das encomendas
+// V7.68 — custo e lucro estimado também no relatório semanal compartilhado
 
 import android.content.Context
 import android.os.Bundle
@@ -936,7 +936,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.67") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.68") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1012,11 +1012,15 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             val weekReceivable = activeWeekOrders.sumOf { (it.totalValue - effectivePaid(it, payments)).coerceAtLeast(0.0) }
                             val deliveredWithBalance = activeWeekOrders.count { it.status == "Entregue" && (it.totalValue - effectivePaid(it, payments)) > 0.009 }
                             val collectionRate = if (weekExpected > 0.0) (weekReceived / weekExpected * 100.0).coerceIn(0.0, 100.0) else 0.0
+                            val weekCost = activeWeekOrders.sumOf { it.unitCost * it.quantity }
+                            val weekEstimatedProfit = weekExpected - weekCost
                             appendLine("Encomendas no período: ${weekOrders.size}")
                             appendLine("Em aberto: ${activeWeekOrders.count { it.status != "Entregue" }}")
                             appendLine("Entregues: ${weekOrders.count { it.status == "Entregue" }}")
                             appendLine("Canceladas: ${weekOrders.count { it.status == "Cancelada" }}")
                             appendLine("Valor previsto das encomendas ativas: R$ %.2f".format(weekExpected))
+                            appendLine("Custo estimado das encomendas: R$ %.2f".format(weekCost))
+                            appendLine("Lucro estimado das encomendas: R$ %.2f".format(weekEstimatedProfit))
                             appendLine("Recebido das encomendas: R$ %.2f".format(weekReceived))
                             appendLine("Saldo a receber: R$ %.2f".format(weekReceivable))
                             appendLine("Entregues com saldo pendente: $deliveredWithBalance")
@@ -1962,7 +1966,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
 
     if (selectedTab == 6 && userRole == "Administrador") item {            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("✅ Versão V7.67", style = MaterialTheme.typography.titleMedium)
+                    Text("✅ Versão V7.68", style = MaterialTheme.typography.titleMedium)
                     Text("Sistema revisado para uso diário: encomendas, entregas, produção, financeiro, clientes, relatórios, PDF, CSV, backup, sincronização e proteção por PIN.")
                     Text("Usuário atual: $userName • Perfil: $userRole", style = MaterialTheme.typography.bodySmall)
                 }
