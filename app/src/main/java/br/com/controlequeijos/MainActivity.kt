@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.69 — compartilhamento do faturamento semanal com comparativo
+// V7.70 — produtos em destaque no relatório semanal compartilhado
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.65")
+        put("appVersion", "V7.70")
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
@@ -1094,6 +1094,18 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                         }
                     }
                     OutlinedButton(onClick = {
+                        val weeklyProductTotals = linkedMapOf<String, Pair<Int, Double>>()
+                        filteredSales.filter { isInWeekOffset(it.date, selectedWeekOffset) }.forEach { sale ->
+                            val current = weeklyProductTotals[sale.productName] ?: (0 to 0.0)
+                            weeklyProductTotals[sale.productName] = (current.first + sale.quantity) to (current.second + sale.quantity * sale.unitValue)
+                        }
+                        orders.filter { it.status == "Entregue" && isInWeekOffset(it.deliveryDate, selectedWeekOffset) }.forEach { order ->
+                            val current = weeklyProductTotals[order.productName] ?: (0 to 0.0)
+                            weeklyProductTotals[order.productName] = (current.first + order.quantity) to (current.second + order.totalValue)
+                        }
+                        val weeklyProductBreakdown = weeklyProductTotals.entries
+                            .sortedByDescending { it.value.second }
+                            .take(5)
                         val billingReport = buildString {
                             appendLine("CONTROLE QUEIJOS — FATURAMENTO SEMANAL")
                             appendLine(weekRangeLabel(selectedWeekOffset))
@@ -1109,6 +1121,15 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             appendLine("Lucro bruto estimado total: R$ %.2f".format(weeklyGrossProfit))
                             appendLine("Despesas registradas: R$ %.2f".format(weeklyExpenseTotal))
                             appendLine("Resultado estimado após despesas: R$ %.2f".format(weeklyNetProfit))
+                            appendLine()
+                            appendLine("PRODUTOS COM MAIOR FATURAMENTO NA SEMANA")
+                            if (weeklyProductBreakdown.isEmpty()) {
+                                appendLine("Nenhuma venda ou encomenda entregue no período.")
+                            } else {
+                                weeklyProductBreakdown.forEachIndexed { index, entry ->
+                                    appendLine("${index + 1}. ${entry.key} — ${entry.value.first} un. — R$ %.2f".format(entry.value.second))
+                                }
+                            }
                             appendLine()
                             appendLine("COMPARATIVO COM A SEMANA ANTERIOR")
                             appendLine("Faturamento anterior: R$ %.2f".format(previousWeekRevenue))
