@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.70 — produtos em destaque no relatório semanal compartilhado
+// V7.71 — comparação semanal com variação percentual
 
 import android.content.Context
 import android.os.Bundle
@@ -372,6 +372,14 @@ private fun weekRangeLabel(offset: Int): String {
         else -> "Semana selecionada"
     }
     return "$prefix (${fmt.format(start.time)} a ${fmt.format(end.time)})"
+}
+
+private fun percentChangeLabel(current: Double, previous: Double): String {
+    if (kotlin.math.abs(previous) < 0.005) {
+        return if (kotlin.math.abs(current) < 0.005) "0,0% (sem alteração)" else "novo (sem base anterior)"
+    }
+    val percent = ((current - previous) / kotlin.math.abs(previous)) * 100.0
+    return String.format(Locale("pt", "BR"), "%+.1f%%", percent)
 }
 
 private fun isInCurrentWeek(time: Long): Boolean = isInWeekOffset(time, 0)
@@ -1076,10 +1084,10 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Comparativo com a semana anterior", style = MaterialTheme.typography.titleMedium)
-                            Text("Faturamento: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyRevenue, previousWeekRevenue, weeklyRevenue - previousWeekRevenue))
-                            Text("Lucro bruto: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyGrossProfit, previousWeekGrossProfit, weeklyGrossProfit - previousWeekGrossProfit))
-                            Text("Despesas: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyExpenseTotal, previousWeekExpenseTotal, weeklyExpenseTotal - previousWeekExpenseTotal))
-                            Text("Resultado após despesas: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f".format(weeklyNetProfit, previousWeekNetProfit, weeklyNetProfit - previousWeekNetProfit))
+                            Text("Faturamento: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f • %s".format(weeklyRevenue, previousWeekRevenue, weeklyRevenue - previousWeekRevenue, percentChangeLabel(weeklyRevenue, previousWeekRevenue)))
+                            Text("Lucro bruto: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f • %s".format(weeklyGrossProfit, previousWeekGrossProfit, weeklyGrossProfit - previousWeekGrossProfit, percentChangeLabel(weeklyGrossProfit, previousWeekGrossProfit)))
+                            Text("Despesas: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f • %s".format(weeklyExpenseTotal, previousWeekExpenseTotal, weeklyExpenseTotal - previousWeekExpenseTotal, percentChangeLabel(weeklyExpenseTotal, previousWeekExpenseTotal)))
+                            Text("Resultado após despesas: atual R$ %.2f • anterior R$ %.2f • variação R$ %.2f • %s".format(weeklyNetProfit, previousWeekNetProfit, weeklyNetProfit - previousWeekNetProfit, percentChangeLabel(weeklyNetProfit, previousWeekNetProfit)))
                             Text("A semana anterior considera segunda-feira a domingo, imediatamente antes da semana atual.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -1133,13 +1141,13 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
                             appendLine()
                             appendLine("COMPARATIVO COM A SEMANA ANTERIOR")
                             appendLine("Faturamento anterior: R$ %.2f".format(previousWeekRevenue))
-                            appendLine("Variação do faturamento: R$ %.2f".format(weeklyRevenue - previousWeekRevenue))
+                            appendLine("Variação do faturamento: R$ %.2f (%s)".format(weeklyRevenue - previousWeekRevenue, percentChangeLabel(weeklyRevenue, previousWeekRevenue)))
                             appendLine("Lucro bruto anterior: R$ %.2f".format(previousWeekGrossProfit))
-                            appendLine("Variação do lucro bruto: R$ %.2f".format(weeklyGrossProfit - previousWeekGrossProfit))
+                            appendLine("Variação do lucro bruto: R$ %.2f (%s)".format(weeklyGrossProfit - previousWeekGrossProfit, percentChangeLabel(weeklyGrossProfit, previousWeekGrossProfit)))
                             appendLine("Despesas anteriores: R$ %.2f".format(previousWeekExpenseTotal))
-                            appendLine("Variação das despesas: R$ %.2f".format(weeklyExpenseTotal - previousWeekExpenseTotal))
+                            appendLine("Variação das despesas: R$ %.2f (%s)".format(weeklyExpenseTotal - previousWeekExpenseTotal, percentChangeLabel(weeklyExpenseTotal, previousWeekExpenseTotal)))
                             appendLine("Resultado após despesas anterior: R$ %.2f".format(previousWeekNetProfit))
-                            appendLine("Variação do resultado: R$ %.2f".format(weeklyNetProfit - previousWeekNetProfit))
+                            appendLine("Variação do resultado: R$ %.2f (%s)".format(weeklyNetProfit - previousWeekNetProfit, percentChangeLabel(weeklyNetProfit, previousWeekNetProfit)))
                             appendLine()
                             appendLine("Relatório financeiro sem nomes de clientes.")
                         }
