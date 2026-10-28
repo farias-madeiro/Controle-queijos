@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.71 — comparação semanal com variação percentual
+// V7.72 — identificação correta da versão nos backups
 
 import android.content.Context
 import android.os.Bundle
@@ -241,7 +241,7 @@ private fun buildBackupJson(context: Context): String {
     return JSONObject().apply {
         put("format", "controle-queijos-backup")
         put("version", 2)
-        put("appVersion", "V7.70")
+        put("appVersion", "V" + BuildConfig.VERSION_NAME)
         put("createdAt", System.currentTimeMillis())
         put("data", JSONObject().apply {
             put("products", JSONArray(prefs.getString(PRODUCTS, "[]")))
