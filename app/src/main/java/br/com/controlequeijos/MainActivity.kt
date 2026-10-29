@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.72 — identificação correta da versão nos backups
+// V7.73 — versão e data visíveis no resumo do backup
 
 import android.content.Context
 import android.os.Bundle
@@ -300,6 +300,8 @@ private fun restoreBackupJson(context: Context, text: String): Result<Unit> = ru
 private fun buildBackupSummary(text: String): String = runCatching {
     val root = JSONObject(text)
     val createdAt = root.optLong("createdAt", 0L)
+    val appVersion = root.optString("appVersion", "Versão não identificada")
+        .ifBlank { "Versão não identificada" }
     val data = root.getJSONObject("data")
     val counts = data.optJSONObject("counts")
     val products = counts?.optInt("products", data.optJSONArray("products")?.length() ?: 0) ?: 0
@@ -309,6 +311,9 @@ private fun buildBackupSummary(text: String): String = runCatching {
     val clients = counts?.optInt("clients", data.optJSONArray("clients")?.length() ?: 0) ?: 0
     val payments = counts?.optInt("payments", data.optJSONArray("payments")?.length() ?: 0) ?: 0
     buildString {
+        appendLine("Versão do aplicativo: $appVersion")
+        if (createdAt > 0L) appendLine("Backup criado em: ${dateText(createdAt)}")
+        appendLine()
         appendLine("O backup contém:")
         appendLine("• $clients cliente(s)")
         appendLine("• $products produto(s)")
@@ -316,7 +321,6 @@ private fun buildBackupSummary(text: String): String = runCatching {
         appendLine("• $sales venda(s)")
         appendLine("• $expenses gasto(s)")
         appendLine("• $payments recebimento(s)")
-        if (createdAt > 0L) appendLine("Criado em: ${dateText(createdAt)}")
     }
 }.getOrDefault("Não foi possível ler o resumo deste backup.")
 
