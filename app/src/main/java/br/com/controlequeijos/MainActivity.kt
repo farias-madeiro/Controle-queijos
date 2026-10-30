@@ -1,6 +1,6 @@
 package br.com.controlequeijos
 
-// V7.73 — versão e data visíveis no resumo do backup
+// V7.74 — versão atual exibida automaticamente no cabeçalho e nas informações do app
 
 import android.content.Context
 import android.os.Bundle
@@ -948,7 +948,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
     val overdueReceivableOrders = activeOrders.count { it.status != "Cancelada" && isOverdue(it.deliveryDate) && (it.totalValue - effectivePaid(it, payments)) > 0.005 }
 
     MaterialTheme {
-        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V7.69") }) }) { pad ->
+        Scaffold(topBar = { TopAppBar(title = { Text("Controle Queijos — V${BuildConfig.VERSION_NAME}") }) }) { pad ->
             LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2033,7 +2033,7 @@ fun ControleQueijosApp(context: Context, forcePinLock: Boolean = false, onPinUnl
 
     if (selectedTab == 6 && userRole == "Administrador") item {            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("✅ Versão V7.69", style = MaterialTheme.typography.titleMedium)
+                    Text("✅ Versão V${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
                     Text("Sistema revisado para uso diário: encomendas, entregas, produção, financeiro, clientes, relatórios, PDF, CSV, backup, sincronização e proteção por PIN.")
                     Text("Usuário atual: $userName • Perfil: $userRole", style = MaterialTheme.typography.bodySmall)
                 }
